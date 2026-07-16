@@ -1,0 +1,13 @@
+[package]
+name = "phantom-fs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+walkdir.workspace = true
+grep = "0.3"

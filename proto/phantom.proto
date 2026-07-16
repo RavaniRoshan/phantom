@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package phantom;
+
+// The LLM reasoning service. Rust (phantom-core) is the client; the Python
+// service (phantom_llm) is the server. All action decisions flow through the
+// single neutral schema defined here so every provider behaves comparably.
+service PhantomLLM {
+  // Given current state (optionally a screenshot) + history, return the next action.
+  rpc DecideAction (ActionRequest) returns (ActionResponse);
+
+  // Decompose a high-level user task into ordered subtasks with a backend label.
+  rpc PlanTask (PlanRequest) returns (PlanResponse);
+
+  // Stream real-time reasoning chunks for the TUI while deciding.
+  rpc StreamThinking (ActionRequest) returns (stream ThinkingChunk);
+}
+
+// What the agent currently perceives, sent to the LLM for the next decision.
+message ActionRequest {
+  bytes screenshot = 1;          // PNG screenshot (visual tasks); empty otherwise
+  string task_description = 2;   // the overarching user goal
+  string current_context = 3;    // text summary of current screen / state
+  repeated ActionHistory history = 4; // actions already taken this task
+  string mode = 5;               // "safe" | "hero"
+  string backend = 6;            // active backend for this step: browser|cli|file|desktop
+}
+
+// The single neutral action shape. Every LLM provider maps its native
+// tool/function-calling output onto THIS message.
+message ActionResponse {
+  string action_type = 1;        // browser | cli | file | desktop | done
+  string action = 2;             // specific action name, e.g. "navigate", "write_file"
+  map<string, string> params = 3; // action arguments (typed on the Rust/Python side)
+  string reasoning = 4;          // why this action was chosen
+  float confidence = 5;          // 0..1
+}
+
+message PlanRequest {
+  string task = 1;
+  string mode = 2;
+}
+
+message PlanResponse {
+  repeated SubTask steps = 1;
+}
+
+message SubTask {
+  int32 order = 1;
+  string description = 2;
+  string backend = 3;            // browser | cli | file | desktop
+}
+
+message ActionHistory {
+  string action = 1;
+  string result = 2;
+  bool success = 3;
+}
+
+message ThinkingChunk {
+  string text = 1;
+  string phase = 2;              // planning | executing | observing
+}

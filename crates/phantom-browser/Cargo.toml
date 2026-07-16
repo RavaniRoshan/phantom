@@ -1,0 +1,13 @@
+[package]
+name = "phantom-browser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+phantom-proto = { path = "../phantom-proto" }
+chromiumoxide = "0.6"
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+futures.workspace = true

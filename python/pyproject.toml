@@ -1,0 +1,27 @@
+[project]
+name = "phantom-llm"
+version = "0.1.0"
+description = "Neutral, model-agnostic LLM service for the Phantom agent"
+requires-python = ">=3.11"
+dependencies = [
+    "grpcio>=1.60",
+    "grpcio-tools>=1.60",
+    "anthropic>=0.40",
+    "openai>=1.30",
+    "google-generativeai>=0.5",
+    "ollama>=0.4",
+    "pydantic>=2.0",
+]
+
+[project.scripts]
+phantom-llm-server = "phantom_llm.server:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["phantom_llm*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

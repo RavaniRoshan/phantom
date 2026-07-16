@@ -1,0 +1,69 @@
+name: CI
+
+# Validate the workspace on the two relevant platforms:
+#   - Linux: portable crates + the Python neutrality tests.
+#   - Windows: compiles the REAL phantom-desktop backend (cfg(windows)), which
+#     the Linux env cannot build. CI is a compile-gate only for the desktop
+#     backend — its runtime (CreateDesktop on an interactive session) still
+#     requires a real Windows machine to exercise.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  linux:
+    name: Linux — check & portable tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cargo check (all targets)
+        run: cargo check --all-targets
+
+      - name: Test portable Rust crates
+        run: cargo test -p phantom-fs -p phantom-proto
+
+      - name: Python provider tests
+        run: |
+          cd python
+          pip install -e .
+          pytest tests/ -q
+
+  windows:
+    name: Windows — real desktop backend compile
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (MSVC target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      # This compiles phantom-desktop's actual Windows implementation
+      # (CreateDesktopW / PrintWindow / SendInput) — the part Linux can't build.
+      - name: Cargo check (windows-msvc target)
+        run: cargo check --target x86_64-pc-windows-msvc
+
+      - name: Test portable Rust crates
+        run: cargo test -p phantom-fs -p phantom-proto
