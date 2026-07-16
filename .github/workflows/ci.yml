@@ -43,8 +43,8 @@ jobs:
       - name: Python provider tests
         run: |
           cd python
-          pip install -e .
-          pytest tests/ -q
+          pip install -e . pytest
+          python -m pytest tests/ -q
 
   windows:
     name: Windows — real desktop backend compile

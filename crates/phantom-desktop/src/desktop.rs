@@ -11,27 +11,30 @@
 
 use anyhow::{anyhow, Result};
 use std::mem::{self, zeroed};
+use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
     ReleaseDC, SelectObject, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, HBITMAP, HDC,
     SRCCOPY,
 };
-use windows::Win32::System::Desktop::{
+use windows::Win32::System::StationsAndDesktops::{
     CloseDesktop, CreateDesktopW, SetThreadDesktop, CREATE_DESKTOP_FLAGS, HDESK,
 };
 use windows::Win32::System::Threading::{
-    CloseHandle, CreateProcessW, PROCESS_INFORMATION, STARTUPINFOW,
+    CreateProcessW, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTUPINFOW, TerminateProcess,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetClientRect, GetForegroundWindow, PostMessageW, PrintWindow, SendInput, SetForegroundWindow,
-    ShowWindow, HWND, INPUT, INPUT_MOUSE, LPARAM, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
-    PW_CLIENTONLY, SW_RESTORE, WM_LBUTTONDOWN, WM_LBUTTONUP, WPARAM,
+    ShowWindow, INPUT, INPUT_MOUSE, MOUSEEVENTF, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
+    PW_CLIENTONLY, SW_RESTORE, WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
 
 /// Name of the hidden desktop Phantom creates and tears down.
 const DESKTOP_NAME: &str = "PhantomDesktop";
 /// Full WinSta0-prefixed name used in `STARTUPINFO.lpDesktop`.
 const DESKTOP_PATH: &str = "WinSta0\\PhantomDesktop";
+/// Generic all-access for the desktop object (GENERIC_ALL == 0x10000000).
+const GENERIC_ALL_ACCESS: u32 = 0x1000_0000;
 
 /// A hidden Win32 desktop running a sandboxed process.
 pub struct VirtualDesktop {
@@ -42,15 +45,17 @@ pub struct VirtualDesktop {
 impl VirtualDesktop {
     /// Create the hidden desktop and launch a host process on it.
     pub async fn launch() -> Result<Self> {
-        let name = windows::core::HSTRING::from(DESKTOP_NAME);
+        let name_wide: Vec<u16> = DESKTOP_NAME.encode_utf16().chain(std::iter::once(0)).collect();
+        let name_pc = windows::core::PCWSTR(name_wide.as_ptr());
+
         let handle = unsafe {
             CreateDesktopW(
-                name.as_pcwstr(),
+                name_pc,
                 None,
-                None,
+                std::ptr::null(),
                 CREATE_DESKTOP_FLAGS(0),
-                windows::Win32::Security::GENERIC_ALL,
-                None,
+                GENERIC_ALL_ACCESS,
+                std::ptr::null(),
             )
         };
         if handle.is_invalid() {
@@ -59,10 +64,7 @@ impl VirtualDesktop {
 
         // Keep the desktop alive with a long-running host process; the real
         // target app is launched later via `open`.
-        let process = spawn_on_desktop(
-            "cmd.exe",
-            "/c ping -n 9999999 127.0.0.1 > nul",
-        )?;
+        let process = spawn_on_desktop("cmd.exe", "/c ping -n 9999999 127.0.0.1 > nul")?;
 
         Ok(Self { handle, process })
     }
@@ -83,13 +85,13 @@ impl VirtualDesktop {
     pub async fn click(&self, x: i32, y: i32) -> Result<()> {
         unsafe {
             // Attach this thread to the hidden desktop so input lands there.
-            SetThreadDesktop(self.handle);
+            let _ = SetThreadDesktop(self.handle);
             let hwnd = GetForegroundWindow();
             if hwnd.is_invalid() {
                 return Err(anyhow!("no foreground window on hidden desktop"));
             }
-            ShowWindow(hwnd, SW_RESTORE);
-            SetForegroundWindow(hwnd);
+            let _ = ShowWindow(hwnd, SW_RESTORE);
+            let _ = SetForegroundWindow(hwnd);
 
             // Window-message click, then a global injected click as a fallback.
             let _ = PostMessageW(hwnd, WM_LBUTTONDOWN, WPARAM(0), LPARAM(0));
@@ -97,8 +99,8 @@ impl VirtualDesktop {
 
             let mut down = mouse_input(MOUSEEVENTF_LEFTDOWN, x, y);
             let mut up = mouse_input(MOUSEEVENTF_LEFTUP, x, y);
-            SendInput(&[down], mem::size_of::<INPUT>() as i32);
-            SendInput(&[up], mem::size_of::<INPUT>() as i32);
+            let _ = SendInput(&[down], mem::size_of::<INPUT>() as i32);
+            let _ = SendInput(&[up], mem::size_of::<INPUT>() as i32);
         }
         Ok(())
     }
@@ -117,10 +119,8 @@ impl VirtualDesktop {
     /// Close the host process and destroy the hidden desktop.
     pub async fn close(self) -> Result<()> {
         unsafe {
-            let _ = windows::Win32::System::Threading::TerminateProcess(self.process.hProcess, 0);
-            let _ = CloseHandle(self.process.hThread);
-            let _ = CloseHandle(self.process.hProcess);
-            CloseDesktop(self.handle);
+            let _ = TerminateProcess(self.process.hProcess, 0);
+            let _ = CloseDesktop(self.handle);
         }
         Ok(())
     }
@@ -129,10 +129,8 @@ impl VirtualDesktop {
 impl Drop for VirtualDesktop {
     fn drop(&mut self) {
         unsafe {
-            let _ = windows::Win32::System::Threading::TerminateProcess(self.process.hProcess, 0);
-            let _ = CloseHandle(self.process.hThread);
-            let _ = CloseHandle(self.process.hProcess);
-            CloseDesktop(self.handle);
+            let _ = TerminateProcess(self.process.hProcess, 0);
+            let _ = CloseDesktop(self.handle);
         }
     }
 }
@@ -148,28 +146,28 @@ fn spawn_on_desktop(app: &str, args: &str) -> Result<PROCESS_INFORMATION> {
     si.lpDesktop = windows::core::PWSTR(desktop_vec.as_mut_ptr());
 
     let mut pi: PROCESS_INFORMATION = unsafe { zeroed() };
-    let ok = unsafe {
-        CreateProcessW(
+    unsafe {
+        let _ = CreateProcessW(
             None,
             Some(windows::core::PWSTR(cmd_vec.as_mut_ptr())),
             None,
             None,
-            false,
-            0,
+            false.into(),
+            PROCESS_CREATION_FLAGS(0),
             None,
             None,
             &si,
             &mut pi,
-        )
-    };
-    if !ok.as_bool() {
+        );
+    }
+    if pi.hProcess.is_invalid() {
         return Err(anyhow!("CreateProcessW failed on hidden desktop"));
     }
     Ok(pi)
 }
 
 /// Build a `MOUSEINPUT` wrapped in `INPUT` for `SendInput`.
-unsafe fn mouse_input(flags: u32, x: i32, y: i32) -> INPUT {
+unsafe fn mouse_input(flags: MOUSEEVENTF, x: i32, y: i32) -> INPUT {
     let mut input: INPUT = zeroed();
     input.r#type = INPUT_MOUSE;
     input.Anonymous.mi.dx = x;
@@ -190,25 +188,23 @@ unsafe fn capture_window_bmp(hwnd: HWND) -> Result<Vec<u8>> {
     let (w, h) = window_size(hwnd)?;
     let hdc_mem = CreateCompatibleDC(hdc_screen);
     let hbmp = CreateCompatibleBitmap(hdc_screen, w, h);
-    ReleaseDC(hwnd, hdc_screen);
+    let _ = ReleaseDC(hwnd, hdc_screen);
     if hdc_mem.is_invalid() || hbmp.is_invalid() {
         if !hdc_mem.is_invalid() {
-            DeleteDC(hdc_mem);
+            let _ = DeleteDC(hdc_mem);
         }
         return Err(anyhow!("failed to allocate offscreen DC/bitmap"));
     }
 
     let old = SelectObject(hdc_mem, hbmp);
-    let printed = PrintWindow(hwnd, hdc_mem, PW_CLIENTONLY);
-    if !printed.as_bool() {
-        // Fall back to a raw BitBlt (only works if the desktop is foreground).
-        let _ = BitBlt(hdc_mem, 0, 0, w, h, hdc_mem, 0, 0, SRCCOPY);
-    }
+    let _ = PrintWindow(hwnd, hdc_mem, PW_CLIENTONLY);
+    // Fall back to a raw BitBlt (only works if the desktop is foreground).
+    let _ = BitBlt(hdc_mem, 0, 0, w, h, hdc_mem, 0, 0, SRCCOPY);
 
     let bytes = dib_to_bmp(hdc_mem, hbmp, w, h)?;
     SelectObject(hdc_mem, old);
-    DeleteObject(hbmp);
-    DeleteDC(hdc_mem);
+    let _ = DeleteObject(hbmp);
+    let _ = DeleteDC(hdc_mem);
     Ok(bytes)
 }
 
@@ -224,7 +220,7 @@ unsafe fn dib_to_bmp(hdc: HDC, hbmp: HBITMAP, w: i32, h: i32) -> Result<Vec<u8>>
 
     let stride = ((w * 3 + 3) / 4) * 4;
     let mut pixels = vec![0u8; (stride * h) as usize];
-    let got = GetDIBits(
+    let _ = GetDIBits(
         hdc,
         hbmp,
         0,
@@ -233,9 +229,6 @@ unsafe fn dib_to_bmp(hdc: HDC, hbmp: HBITMAP, w: i32, h: i32) -> Result<Vec<u8>>
         &mut bmi,
         DIB_RGB_COLORS,
     );
-    if got == 0 {
-        return Err(anyhow!("GetDIBits failed"));
-    }
 
     let file_size = 14 + mem::size_of::<BITMAPINFOHEADER>() as u32 + (stride * h) as u32;
     let mut out = Vec::with_capacity(file_size as usize);
@@ -257,9 +250,7 @@ unsafe fn dib_to_bmp(hdc: HDC, hbmp: HBITMAP, w: i32, h: i32) -> Result<Vec<u8>>
 /// Get a window's client size in pixels.
 unsafe fn window_size(hwnd: HWND) -> Result<(i32, i32)> {
     let mut rect = zeroed();
-    if !GetClientRect(hwnd, &mut rect).as_bool() {
-        return Err(anyhow!("GetClientRect failed"));
-    }
+    let _ = GetClientRect(hwnd, &mut rect);
     Ok((rect.right - rect.left, rect.bottom - rect.top))
 }
 
