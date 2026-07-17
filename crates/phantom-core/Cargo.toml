@@ -27,3 +27,8 @@ futures.workspace = true
 phantom-desktop = { path = "../phantom-desktop" }
 
 [dev-dependencies]
+tracing-subscriber.workspace = true
+
+[[example]]
+name = "headless_task"
+path = "examples/headless_task.rs"

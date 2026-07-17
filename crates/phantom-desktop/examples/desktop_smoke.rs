@@ -73,10 +73,12 @@ async fn main() {
 
     // 3. Capture BEFORE typing.
     let mut ok_capture = false;
+    let mut before_bytes: Option<Vec<u8>> = None;
     match desktop.screenshot().await {
         Ok(bytes) => {
             let stats = bmp_stats(&bytes);
             ok_capture = stats.non_blank;
+            before_bytes = Some(bytes.clone());
             let p = out_dir.join("01-before.bmp");
             let _ = std::fs::write(&p, &bytes);
             log!(
@@ -97,10 +99,12 @@ async fn main() {
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     // 5. Capture AFTER typing (visual proof of any text that landed).
+    let mut after_bytes: Option<Vec<u8>> = None;
     match desktop.screenshot().await {
         Ok(bytes) => {
             let stats = bmp_stats(&bytes);
             ok_capture |= stats.non_blank;
+            after_bytes = Some(bytes.clone());
             let p = out_dir.join("02-after.bmp");
             let _ = std::fs::write(&p, &bytes);
             log!(
@@ -111,6 +115,23 @@ async fn main() {
             );
         }
         Err(e) => log!("[fail] screenshot #2: {e}"),
+    }
+
+    // 6. Pixel-diff before vs after. If UIA text landed in Notepad, the editor
+    //    area changed; this is the concrete proof `type_text` did something
+    //    (not just that the call returned Ok).
+    if let (Some(before), Some(after)) = (&before_bytes, &after_bytes) {
+        let diff = bmp_diff(before, after);
+        log!(
+            "[info] pixels changed by typing: {} ({:.4}% of image)",
+            diff.changed,
+            diff.ratio * 100.0
+        );
+        if diff.ratio > 0.0005 {
+            log!("[ok]   UIA text entry produced a visible change in the window");
+        } else {
+            log!("[warn] no visible change from typing (control may have had no Value pattern / service-session restriction)");
+        }
     }
 
     // 6. Tear down.
@@ -160,6 +181,30 @@ impl BmpStats {
             self.total,
             if self.non_blank { "" } else { " [BLANK]" }
         )
+    }
+}
+
+/// Count pixels that differ between two same-sized 24-bit BMPs. Returns the
+/// absolute count of differing bytes and the ratio over the pixel region.
+struct BmpDiff {
+    changed: usize,
+    ratio: f64,
+}
+
+fn bmp_diff(a: &[u8], b: &[u8]) -> BmpDiff {
+    let pa = a.get(pixel_offset(a)..).unwrap_or(&[]);
+    let pb = b.get(pixel_offset(b)..).unwrap_or(&[]);
+    let n = pa.len().min(pb.len());
+    let changed = (0..n).filter(|&i| pa[i] != pb[i]).count();
+    let ratio = if n == 0 { 0.0 } else { changed as f64 / n as f64 };
+    BmpDiff { changed, ratio }
+}
+
+fn pixel_offset(bytes: &[u8]) -> usize {
+    if bytes.len() > 54 && &bytes[0..2] == b"BM" {
+        u32::from_le_bytes([bytes[10], bytes[11], bytes[12], bytes[13]]) as usize
+    } else {
+        0
     }
 }
 

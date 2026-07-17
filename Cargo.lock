@@ -1668,6 +1668,7 @@ dependencies = [
  "toml",
  "tonic",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
