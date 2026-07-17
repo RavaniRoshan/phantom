@@ -38,12 +38,16 @@ jobs:
         run: cargo check --all-targets
 
       - name: Test portable Rust crates
-        run: cargo test -p phantom-fs -p phantom-proto
+        run: cargo test -p phantom-fs -p phantom-proto -p phantom-core
 
-      - name: Python provider tests
+      - name: Python provider + end-to-end tests
         run: |
           cd python
           pip install -e . pytest
+          # Generate gRPC stubs, then prove the service imports and the whole
+          # stack runs offline via the mock provider end-to-end test.
+          python generate_proto.py
+          PHANTOM_PROVIDER=mock python -c "import phantom_llm.server as s; print('server import OK')"
           python -m pytest tests/ -q
 
   windows:
@@ -66,4 +70,4 @@ jobs:
         run: cargo check --target x86_64-pc-windows-msvc
 
       - name: Test portable Rust crates
-        run: cargo test -p phantom-fs -p phantom-proto
+        run: cargo test -p phantom-fs -p phantom-proto -p phantom-core

@@ -118,7 +118,7 @@ Fields:
 
 | key | meaning |
 |-----|---------|
-| `provider` | `claude` \| `openai` \| `gemini` \| `ollama` |
+| `provider` | `claude` \| `openai` \| `gemini` \| `ollama` \| `mock` |
 | `llm_endpoint` | base URL override (Ollama / self-hosted) |
 | `api_key` | provider key (prefer env `PHANTOM_API_KEY`) |
 | `mode` | `safe` (default) \| `hero` |
@@ -141,13 +141,26 @@ adapter converts it into its native tool format and funnels results back through
 `ActionResponse` / `SubTask` shapes. The Rust side never knows which model is
 running.
 
+### Offline mode (no API key)
+
+The `mock` provider is fully offline and deterministic — it needs no SDK and no
+API key. It is ideal for running the entire stack end-to-end in CI, for demos,
+and for testing the Rust↔Python gRPC contract without a paid model. Point the
+server and the TUI at it:
+
+```powershell
+$env:PHANTOM_PROVIDER = "mock"
+python -m phantom_llm.server      # offline, scripted decisions
+cargo run -p phantom-cli --release
+```
+
 ## Testing
 
 ```powershell
-# Rust: cross-platform crates (sandbox, proto, providers' wire shapes)
-cargo test -p phantom-fs -p phantom-proto
+# Rust: cross-platform crates (sandbox, security, proto, providers' wire shapes)
+cargo test -p phantom-fs -p phantom-proto -p phantom-core
 
-# Python: provider neutrality (mocked responses, identical normalized output)
+# Python: provider neutrality + full gRPC end-to-end run (offline, mock provider)
 cd python
 pytest tests/
 ```
