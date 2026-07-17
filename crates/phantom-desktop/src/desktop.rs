@@ -45,6 +45,16 @@ pub struct VirtualDesktop {
     process: PROCESS_INFORMATION,
 }
 
+// SAFETY: `VirtualDesktop` owns only Win32 kernel handles (a desktop `HDESK` and
+// a process handle inside `PROCESS_INFORMATION`). These are process-wide opaque
+// handles, not thread-affine resources, so they are sound to move between
+// threads — required because the agent drives the desktop from a `tokio::spawn`
+// task whose future must be `Send`. Shared access is serialized by the
+// `Mutex<Option<VirtualDesktop>>` the agent wraps it in, so `Sync` is likewise
+// sound. This mirrors the auto-`Send`/`Sync` stub used on non-Windows platforms.
+unsafe impl Send for VirtualDesktop {}
+unsafe impl Sync for VirtualDesktop {}
+
 impl VirtualDesktop {
     /// Create the hidden desktop and launch a host process on it.
     pub async fn launch() -> Result<Self> {
