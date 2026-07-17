@@ -31,6 +31,10 @@ pub struct Agent {
     browser: Arc<Mutex<Option<BrowserBackend>>>,
     #[cfg(windows)]
     desktop: Arc<Mutex<Option<phantom_desktop::VirtualDesktop>>>,
+    /// Name of the hidden desktop this agent drives. Workers spawned by the
+    /// Master Planner set a unique name (`PhantomWorker_N`) so their desktops
+    /// don't collide; the default single-agent path uses `PhantomDesktop`.
+    desktop_name: String,
 }
 
 impl Agent {
@@ -43,7 +47,14 @@ impl Agent {
             browser: Arc::new(Mutex::new(None)),
             #[cfg(windows)]
             desktop: Arc::new(Mutex::new(None)),
+            desktop_name: "PhantomDesktop".to_string(),
         }
+    }
+
+    /// Set the hidden-desktop name this agent will create/drive. Used by the
+    /// Master Planner to isolate each worker on its own `PhantomWorker_N`.
+    pub fn set_desktop_name(&mut self, name: impl Into<String>) {
+        self.desktop_name = name.into();
     }
 
     /// Update the active mode (Safe/Hero) at runtime.
@@ -66,6 +77,19 @@ impl Agent {
         tx.send(AgentEvent::Plan(plan.steps.clone())).await.ok();
 
         // 2. Observe → decide → execute loop.
+        self.execute_loop(task, tx).await
+    }
+
+    /// Run the observe→decide→execute loop for a single (sub)task WITHOUT
+    /// planning or emitting a Plan event. Used by the Master Planner to run one
+    /// sub-task per worker — planning happens once, up front, in the planner.
+    pub async fn run_subtask(&self, task: &str, tx: Sender<AgentEvent>) -> anyhow::Result<()> {
+        self.execute_loop(task, tx).await
+    }
+
+    /// The core observe→decide→execute loop shared by [`Agent::run`] and
+    /// [`Agent::run_subtask`].
+    async fn execute_loop(&self, task: &str, tx: Sender<AgentEvent>) -> anyhow::Result<()> {
         let mut history: Vec<(String, String, bool)> = Vec::new();
         let mut backend = String::new();
         let mut last_screenshot: Option<Vec<u8>> = None;
@@ -222,7 +246,7 @@ impl Agent {
     async fn execute_desktop(&self, action: &ActionResponse) -> StepOutcome {
         let mut guard = self.desktop.lock().await;
         if guard.is_none() {
-            match phantom_desktop::VirtualDesktop::launch().await {
+            match phantom_desktop::VirtualDesktop::launch_named(&self.desktop_name).await {
                 Ok(d) => *guard = Some(d),
                 Err(e) => {
                     return StepOutcome {

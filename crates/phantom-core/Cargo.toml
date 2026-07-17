@@ -17,14 +17,14 @@ prost.workspace = true
 phantom-proto = { path = "../phantom-proto" }
 phantom-browser = { path = "../phantom-browser" }
 phantom-fs = { path = "../phantom-fs" }
+# phantom-desktop compiles cross-platform (a stub off-Windows), so it is a normal
+# dependency: the Master Planner uses its pool sizing (`recommended_workers`) on
+# every platform, while the hidden-desktop backend itself is still only driven
+# under `#[cfg(windows)]`.
+phantom-desktop = { path = "../phantom-desktop" }
 dirs.workspace = true
 tracing.workspace = true
 futures.workspace = true
-
-# The hidden-desktop backend is Windows-only; on other platforms it compiles to
-# a stub, but phantom-core only links it when building for Windows.
-[target.'cfg(windows)'.dependencies]
-phantom-desktop = { path = "../phantom-desktop" }
 
 [dev-dependencies]
 tracing-subscriber.workspace = true
@@ -32,3 +32,9 @@ tracing-subscriber.workspace = true
 [[example]]
 name = "headless_task"
 path = "examples/headless_task.rs"
+
+# Master Planner swarm runner (Phase C). Fans a task's sub-tasks across
+# concurrent workers; verifiable end-to-end on Linux against the mock provider.
+[[example]]
+name = "swarm_task"
+path = "examples/swarm_task.rs"
