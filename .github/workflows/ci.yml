@@ -65,9 +65,16 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       # This compiles phantom-desktop's actual Windows implementation
-      # (CreateDesktopW / PrintWindow / SendInput) — the part Linux can't build.
+      # (CreateDesktopW / PrintWindow / UIA-first input / SendInput) — the part
+      # Linux can't build. The V2-2 UIA input module lives here, so this is the
+      # compile gate for the invisible-desktop backend.
       - name: Cargo check (windows-msvc target)
         run: cargo check --target x86_64-pc-windows-msvc
+
+      # Explicit gate for the hidden-desktop backend (V2-2), including the new
+      # UIA-first input module.
+      - name: Cargo check phantom-desktop (windows-msvc)
+        run: cargo check --target x86_64-pc-windows-msvc -p phantom-desktop
 
       - name: Test portable Rust crates
         run: cargo test -p phantom-fs -p phantom-proto -p phantom-core

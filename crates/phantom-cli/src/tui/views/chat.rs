@@ -25,7 +25,10 @@ fn msg_to_lines(msg: &Msg) -> Vec<Line<'static>> {
         ))],
         Msg::Agent(s) => wrap(s, Color::White),
         Msg::System(s) => wrap(&format!("· {s}"), Color::Yellow),
-        Msg::Error(s) => wrap(&format!("✗ {s}"), Color::Red),
+        Msg::Error(s) => vec![Line::from(Span::styled(
+            format!("✗ ERROR: {s}"),
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        ))],
         Msg::Thinking(text, phase) => wrap(&format!("[{}] {}", phase, text), Color::Magenta),
         Msg::Plan(steps) => {
             let mut out = vec![Line::from(
@@ -52,7 +55,7 @@ Phantom commands
 /settings        open the settings page
 /safe            switch to Safe mode (restricted)
 /hero            switch to Hero mode (full access)
-/provider <name> set LLM provider (claude|openai|gemini|ollama|mock)
+/provider <name> set LLM provider (claude|openai|gemini|ollama|mock|nvidia)
 /mode <safe|hero> switch mode
 /clear           clear the transcript
 /quit            exit Phantom

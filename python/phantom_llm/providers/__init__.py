@@ -7,6 +7,9 @@ _PROVIDERS = {
     "openai": "openai:OpenAIProvider",
     "gemini": "gemini:GeminiProvider",
     "ollama": "ollama:OllamaProvider",
+    # NVIDIA NIM (OpenAI-compatible) — free-tier vision models for zero-cost
+    # live visual-reasoning testing. Keeps the neutral schema (no lock-in).
+    "nvidia": "nvidia:NvidiaProvider",
     # Offline, deterministic, SDK-free provider — runs the whole stack without
     # an API key. Used for end-to-end tests and demos.
     "mock": "mock:MockProvider",
