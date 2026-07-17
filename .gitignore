@@ -21,6 +21,11 @@ python/phantom_pb2_grpc.py
 .phantom/
 *.log
 
+# Secrets / local env (NEVER commit API keys)
+.env
+.env.*
+*.local
+
 # Editor / OS
 .vscode/
 .idea/
