@@ -15,4 +15,8 @@ pub enum AgentEvent {
     Result(String),
     /// Something went wrong.
     Error(String),
+    /// A screenshot was captured (e.g. after a `desktop`/`browser` action).
+    /// Carries the raw image bytes so consumers (TUI, or a headless runtime
+    /// check) can display or save what the model saw.
+    Screenshot(Vec<u8>),
 }

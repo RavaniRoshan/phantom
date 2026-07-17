@@ -334,6 +334,9 @@ impl App {
             AgentEvent::Action(a) => self.push(Msg::Action(a)),
             AgentEvent::Thinking(c) => self.push(Msg::Thinking(c.text, c.phase)),
             AgentEvent::Result(s) => self.push(Msg::System(format!("✓ {s}"))),
+            // Screenshots stream separately (the TUI does not render images);
+            // they are surfaced by the headless runtime check instead.
+            AgentEvent::Screenshot(_) => {}
             AgentEvent::Error(s) => self.push(Msg::Error(s)),
         }
     }

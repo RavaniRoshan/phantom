@@ -1,0 +1,147 @@
+name: Windows runtime (invisible desktop)
+
+# Runtime verification of the V2 invisible-desktop backend on a real Windows
+# host. The main CI (ci.yml) only *compile-checks* phantom-desktop; this workflow
+# actually RUNS it: it creates the hidden Win32 desktop, launches Notepad onto
+# it, drives it UIA-first, and captures screenshots via PrintWindow.
+#
+# Why this can work on a GitHub-hosted (non-interactive/service-session) runner:
+# the backend is UIA + CreateDesktopW, designed to operate off-screen without
+# stealing foreground focus. SendInput (which needs the interactive input
+# desktop) is only a fallback. The captured BMPs are uploaded as artifacts so the
+# result is inspectable even when there is no display.
+
+on:
+  push:
+    branches: [main, master, "feat/**"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  desktop-smoke:
+    name: Hidden desktop + Notepad + UIA (runtime)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (MSVC)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build runtime smoke harness
+        run: cargo build --release -p phantom-desktop --example desktop_smoke
+
+      - name: Run invisible-desktop smoke
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'shots'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          & "target\release\examples\desktop_smoke.exe" $dir
+          $code = $LASTEXITCODE
+          Write-Host "desktop_smoke exit code: $code"
+          exit $code
+
+      - name: Upload screenshots + report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: invisible-desktop-shots
+          path: ${{ runner.temp }}/shots/**
+          if-no-files-found: warn
+
+  # Full-stack check: the Python NVIDIA NIM provider decides every action from
+  # real screenshots, driving the hidden desktop end-to-end (plan -> decide ->
+  # execute). Proves the entire observe/decide/execute loop works on live
+  # vision with zero lock-in. Uses the NVIDIA_API_KEY repo secret; never
+  # checked into the repo.
+  nvidia-e2e:
+    name: NVIDIA NIM drives hidden desktop (full stack)
+    runs-on: windows-latest
+    env:
+      PHANTOM_PROVIDER: nvidia
+      PHANTOM_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      PHANTOM_MODEL: meta/llama-3.2-90b-vision-instruct
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python service
+        working-directory: python
+        run: pip install -e . pytest
+
+      - name: Generate gRPC stubs
+        working-directory: python
+        run: python generate_proto.py
+
+      - name: Install Rust (MSVC)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build headless task runner
+        run: cargo build --release -p phantom-core --example headless_task
+
+      - name: Run NVIDIA-driven desktop task (service + task)
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'shots'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $env:PHANTOM_SHOT_DIR = $dir
+
+          # Start the gRPC service in the background, then run the task in the
+          # SAME step. A process spawned with `Start-Process` is reaped when the
+          # step's shell exits, so launching the server in its own step (and the
+          # task in the next) left the server dead by the time the client
+          # connected — that was the earlier "transport error" failure.
+          Start-Process -NoNewWindow python -ArgumentList "-m","phantom_llm.server" `
+            -WorkingDirectory "$PWD/python" -RedirectStandardOutput "$env:RUNNER_TEMP\svc.log" `
+            -RedirectStandardError "$env:RUNNER_TEMP\svc.err"
+
+          # Wait for the port to come up (give the model cold-start room).
+          $up = $false
+          for ($i=0; $i -lt 90; $i++) {
+            if (Test-NetConnection -ComputerName 127.0.0.1 -Port 50051 -InformationLevel Quiet) { $up = $true; break }
+            Start-Sleep -Seconds 1
+          }
+          if (-not $up) {
+            Write-Host "ERROR: LLM service did not come up on :50051"
+            Get-Content "$env:RUNNER_TEMP\svc.err" -ErrorAction SilentlyContinue
+            exit 1
+          }
+
+          & "target\release\examples\headless_task.exe" "Open Notepad and type 'hello phantom'" "http://127.0.0.1:50051"
+          $code = $LASTEXITCODE
+          Write-Host "headless_task exit code: $code"
+          exit $code
+
+      - name: Upload NVIDIA run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-e2e-shots
+          path: ${{ runner.temp }}/shots/**
+          if-no-files-found: warn
+
+      - name: Upload service logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-e2e-service-logs
+          path: ${{ runner.temp }}/svc.*
+          if-no-files-found: warn

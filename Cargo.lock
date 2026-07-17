@@ -1668,6 +1668,7 @@ dependencies = [
  "toml",
  "tonic",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1675,6 +1676,7 @@ name = "phantom-desktop"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "tokio",
  "tracing",
  "windows",
 ]

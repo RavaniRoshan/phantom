@@ -23,9 +23,10 @@ use windows::Win32::System::StationsAndDesktops::{
 };
 use windows::Win32::System::Threading::{
     CreateProcessW, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTUPINFOW, TerminateProcess,
+    Sleep,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetClientRect, GetForegroundWindow, IsWindowVisible, PostMessageW,
+    EnumWindows, FindWindowExW, GetClientRect, GetForegroundWindow, IsWindowVisible, PostMessageW,
     SetForegroundWindow, ShowWindow, SW_RESTORE, WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
 use crate::input;
@@ -124,25 +125,45 @@ impl VirtualDesktop {
 
     /// Type `text` into the control at viewport coordinates `(x, y)`.
     ///
-    /// UIA-first: set the control's value through `ValuePattern.SetValue`, which
-    /// writes the string directly without requiring focus or keystrokes — the
-    /// only reliable way to type onto a hidden desktop. Falls back to Unicode
-    /// `SendInput` keystrokes (and a `WM_CHAR` post) when the control exposes no
-    /// Value pattern.
+    /// Strategy (each tried in order, first success wins):
+    ///   1. UIA value injection (`ValuePattern.SetValue`) — no focus needed.
+    ///   2. Post `WM_CHAR` directly to Notepad's edit-control child window. This
+    ///      does NOT require the window to be foregrounded, so it is the path
+    ///      that works on a service-session hidden desktop where `SendInput` /
+    ///      `SetForegroundWindow` are silently blocked by the system.
+    ///   3. `SendInput` Unicode keystrokes + a `WM_CHAR` post to the foreground
+    ///      window (best-effort; only works if foregrounding succeeded).
     pub async fn type_text(&self, text: &str, x: i32, y: i32) -> Result<()> {
         unsafe {
             let _ = SetThreadDesktop(self.handle);
         }
+        // 1. UIA value injection (no focus needed).
         if input::uia_set_text(x, y, text).is_ok() {
+            tracing::info!("type_text: via UIA ValuePattern");
             return Ok(());
         }
-        // Fallback: best-effort keystroke injection.
-        input::send_input_text(text);
-        unsafe {
-            let hwnd = GetForegroundWindow();
-            if !hwnd.is_invalid() {
+        // 2. Post WM_CHAR to Notepad's edit control (service-session safe).
+        if let Some(edit) = unsafe { notepad_edit_control() } {
+            input::post_chars(edit, text);
+            tracing::info!("type_text: via WM_CHAR to Notepad edit control");
+            return Ok(());
+        }
+        // 3. Best-effort foreground + SendInput (may be blocked on a service
+        //    desktop; kept as a final attempt).
+        if let Some(hwnd) = unsafe { notepad_window() } {
+            unsafe {
+                let _ = ShowWindow(hwnd, SW_RESTORE);
+                let _ = SetForegroundWindow(hwnd);
+                #[allow(unused_unsafe)]
+                unsafe {
+                    Sleep(250);
+                }
+            }
+            input::send_input_text(text);
+            unsafe {
                 input::post_chars(hwnd, text);
             }
+            tracing::info!("type_text: via SendInput + WM_CHAR to foreground Notepad");
         }
         Ok(())
     }
@@ -309,6 +330,37 @@ unsafe fn find_window() -> HWND {
     let mut found: Option<HWND> = None;
     let _ = EnumWindows(Some(cb), LPARAM(&mut found as *mut _ as isize));
     found.unwrap_or_else(|| GetForegroundWindow())
+}
+
+/// Resolve Notepad's top-level window handle on the current thread's desktop.
+///
+/// We match by class name (`Notepad`) rather than title so it works for an
+/// untitled / freshly-launched instance. Returns `None` if no Notepad window
+/// is present (e.g. on a background hidden desktop with only the host process).
+unsafe fn notepad_window() -> Option<HWND> {
+    let class = to_wide_owned("Notepad");
+    let hwnd = FindWindowExW(None, None, windows::core::PCWSTR(class.as_ptr()), None).ok()?;
+    if hwnd.is_invalid() { None } else { Some(hwnd) }
+}
+
+/// Resolve Notepad's edit-control child window (class `Edit`) on the current
+/// thread's desktop. Posting `WM_CHAR` to this handle types into Notepad
+/// without needing the window to be foregrounded — the reliable path on a
+/// service-session hidden desktop.
+unsafe fn notepad_edit_control() -> Option<HWND> {
+    let hwnd = match notepad_window() {
+        Some(h) if !h.is_invalid() => h,
+        _ => return None,
+    };
+    let edit_class = to_wide_owned("Edit");
+    let edit = FindWindowExW(
+        hwnd,
+        None,
+        windows::core::PCWSTR(edit_class.as_ptr()),
+        None,
+    )
+    .ok()?;
+    if edit.is_invalid() { None } else { Some(edit) }
 }
 
 /// Allocate a null-terminated wide string.

@@ -134,7 +134,10 @@ impl Agent {
                 outcome.result.clone(),
                 outcome.success,
             ));
-            last_screenshot = outcome.screenshot;
+            last_screenshot = outcome.screenshot.clone();
+            if let Some(shot) = &outcome.screenshot {
+                tx.send(AgentEvent::Screenshot(shot.clone())).await.ok();
+            }
             last_context = outcome.context;
             backend = action.action_type.clone();
         }

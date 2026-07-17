@@ -7,6 +7,17 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 tracing.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+# Only needed by examples/desktop_smoke.rs (the runtime harness).
+tokio.workspace = true
+
+# The invisible-desktop runtime smoke harness. Compiles on every platform
+# (against the stub off-Windows) but only does real work when run on Windows.
+[[example]]
+name = "desktop_smoke"
+path = "examples/desktop_smoke.rs"
 
 # The hidden-desktop implementation is Windows-only. On other platforms this
 # crate compiles to a stub (see src/stub.rs) so the workspace still type-checks.
