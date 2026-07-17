@@ -11,22 +11,25 @@
 
 use anyhow::{anyhow, Result};
 use std::mem::{self, zeroed};
-use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
     ReleaseDC, SelectObject, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, HBITMAP, HDC,
     SRCCOPY,
 };
+use windows::Win32::Storage::Xps::{PrintWindow, PW_CLIENTONLY};
 use windows::Win32::System::StationsAndDesktops::{
-    CloseDesktop, CreateDesktopW, SetThreadDesktop, CREATE_DESKTOP_FLAGS, HDESK,
+    CloseDesktop, CreateDesktopW, SetThreadDesktop, DESKTOP_CONTROL_FLAGS, HDESK,
 };
 use windows::Win32::System::Threading::{
     CreateProcessW, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTUPINFOW, TerminateProcess,
 };
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    SendInput, INPUT, INPUT_MOUSE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSE_EVENT_FLAGS,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClientRect, GetForegroundWindow, PostMessageW, PrintWindow, SendInput, SetForegroundWindow,
-    ShowWindow, INPUT, INPUT_MOUSE, MOUSEEVENTF, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
-    PW_CLIENTONLY, SW_RESTORE, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    GetClientRect, GetForegroundWindow, PostMessageW, SetForegroundWindow, ShowWindow, SW_RESTORE,
+    WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
 
 /// Name of the hidden desktop Phantom creates and tears down.
@@ -42,6 +45,16 @@ pub struct VirtualDesktop {
     process: PROCESS_INFORMATION,
 }
 
+// SAFETY: `VirtualDesktop` owns only Win32 kernel handles (a desktop `HDESK` and
+// a process handle inside `PROCESS_INFORMATION`). These are process-wide opaque
+// handles, not thread-affine resources, so they are sound to move between
+// threads — required because the agent drives the desktop from a `tokio::spawn`
+// task whose future must be `Send`. Shared access is serialized by the
+// `Mutex<Option<VirtualDesktop>>` the agent wraps it in, so `Sync` is likewise
+// sound. This mirrors the auto-`Send`/`Sync` stub used on non-Windows platforms.
+unsafe impl Send for VirtualDesktop {}
+unsafe impl Sync for VirtualDesktop {}
+
 impl VirtualDesktop {
     /// Create the hidden desktop and launch a host process on it.
     pub async fn launch() -> Result<Self> {
@@ -52,15 +65,13 @@ impl VirtualDesktop {
             CreateDesktopW(
                 name_pc,
                 None,
-                std::ptr::null(),
-                CREATE_DESKTOP_FLAGS(0),
+                None,
+                DESKTOP_CONTROL_FLAGS(0),
                 GENERIC_ALL_ACCESS,
-                std::ptr::null(),
+                None,
             )
+            .map_err(|e| anyhow!("CreateDesktopW failed: {e}"))?
         };
-        if handle.is_invalid() {
-            return Err(anyhow!("CreateDesktopW failed"));
-        }
 
         // Keep the desktop alive with a long-running host process; the real
         // target app is launched later via `open`.
@@ -97,8 +108,8 @@ impl VirtualDesktop {
             let _ = PostMessageW(hwnd, WM_LBUTTONDOWN, WPARAM(0), LPARAM(0));
             let _ = PostMessageW(hwnd, WM_LBUTTONUP, WPARAM(0), LPARAM(0));
 
-            let mut down = mouse_input(MOUSEEVENTF_LEFTDOWN, x, y);
-            let mut up = mouse_input(MOUSEEVENTF_LEFTUP, x, y);
+            let down = mouse_input(MOUSEEVENTF_LEFTDOWN, x, y);
+            let up = mouse_input(MOUSEEVENTF_LEFTUP, x, y);
             let _ = SendInput(&[down], mem::size_of::<INPUT>() as i32);
             let _ = SendInput(&[up], mem::size_of::<INPUT>() as i32);
         }
@@ -149,10 +160,10 @@ fn spawn_on_desktop(app: &str, args: &str) -> Result<PROCESS_INFORMATION> {
     unsafe {
         let _ = CreateProcessW(
             None,
-            Some(windows::core::PWSTR(cmd_vec.as_mut_ptr())),
+            windows::core::PWSTR(cmd_vec.as_mut_ptr()),
             None,
             None,
-            false.into(),
+            BOOL(0),
             PROCESS_CREATION_FLAGS(0),
             None,
             None,
@@ -167,7 +178,7 @@ fn spawn_on_desktop(app: &str, args: &str) -> Result<PROCESS_INFORMATION> {
 }
 
 /// Build a `MOUSEINPUT` wrapped in `INPUT` for `SendInput`.
-unsafe fn mouse_input(flags: MOUSEEVENTF, x: i32, y: i32) -> INPUT {
+unsafe fn mouse_input(flags: MOUSE_EVENT_FLAGS, x: i32, y: i32) -> INPUT {
     let mut input: INPUT = zeroed();
     input.r#type = INPUT_MOUSE;
     input.Anonymous.mi.dx = x;
@@ -216,7 +227,7 @@ unsafe fn dib_to_bmp(hdc: HDC, hbmp: HBITMAP, w: i32, h: i32) -> Result<Vec<u8>>
     bmi.bmiHeader.biHeight = -h; // top-down
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 24;
-    bmi.bmiHeader.biCompression = BI_RGB;
+    bmi.bmiHeader.biCompression = BI_RGB.0;
 
     let stride = ((w * 3 + 3) / 4) * 4;
     let mut pixels = vec![0u8; (stride * h) as usize];
