@@ -8,6 +8,8 @@ license.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 tokio.workspace = true
+# Cross-platform system memory probing for the multi-desktop pool (Phase B).
+sysinfo = "0.32"
 
 [dev-dependencies]
 # Only needed by examples/desktop_smoke.rs (the runtime harness).
@@ -18,6 +20,12 @@ tokio.workspace = true
 [[example]]
 name = "desktop_smoke"
 path = "examples/desktop_smoke.rs"
+
+# The multi-desktop pool runtime harness (Phase B). Same cross-platform rule:
+# compiles everywhere, exercises real concurrent desktops only on Windows.
+[[example]]
+name = "pool_smoke"
+path = "examples/pool_smoke.rs"
 
 # The hidden-desktop implementation is Windows-only. On other platforms this
 # crate compiles to a stub (see src/stub.rs) so the workspace still type-checks.

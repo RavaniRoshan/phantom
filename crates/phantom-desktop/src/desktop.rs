@@ -31,17 +31,24 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use crate::input;
 
-/// Name of the hidden desktop Phantom creates and tears down.
+/// Default name of the hidden desktop Phantom creates and tears down. The pool
+/// (see `pool.rs`) creates additional desktops named `PhantomWorker_N`.
 const DESKTOP_NAME: &str = "PhantomDesktop";
-/// Full WinSta0-prefixed name used in `STARTUPINFO.lpDesktop`.
-const DESKTOP_PATH: &str = "WinSta0\\PhantomDesktop";
 /// Generic all-access for the desktop object (GENERIC_ALL == 0x10000000).
 const GENERIC_ALL_ACCESS: u32 = 0x1000_0000;
+
+/// Build the `WinSta0`-prefixed desktop path used in `STARTUPINFO.lpDesktop`.
+fn desktop_path_for(name: &str) -> String {
+    format!("WinSta0\\{name}")
+}
 
 /// A hidden Win32 desktop running a sandboxed process.
 pub struct VirtualDesktop {
     handle: HDESK,
     process: PROCESS_INFORMATION,
+    /// The desktop's name (e.g. `PhantomDesktop` or `PhantomWorker_2`), used to
+    /// build the `lpDesktop` path when launching further processes onto it.
+    name: String,
 }
 
 // SAFETY: `VirtualDesktop` owns only Win32 kernel handles (a desktop `HDESK` and
@@ -55,9 +62,16 @@ unsafe impl Send for VirtualDesktop {}
 unsafe impl Sync for VirtualDesktop {}
 
 impl VirtualDesktop {
-    /// Create the hidden desktop and launch a host process on it.
+    /// Create the default hidden desktop (`PhantomDesktop`).
     pub async fn launch() -> Result<Self> {
-        let name_wide: Vec<u16> = DESKTOP_NAME.encode_utf16().chain(std::iter::once(0)).collect();
+        Self::launch_named(DESKTOP_NAME).await
+    }
+
+    /// Create a hidden desktop with an explicit `name` and launch a host process
+    /// on it. Used by the [`crate::DesktopPool`] to create `PhantomWorker_N`
+    /// desktops so many can run concurrently and be torn down independently.
+    pub async fn launch_named(name: &str) -> Result<Self> {
+        let name_wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
         let name_pc = windows::core::PCWSTR(name_wide.as_ptr());
 
         let handle = unsafe {
@@ -69,14 +83,27 @@ impl VirtualDesktop {
                 GENERIC_ALL_ACCESS,
                 None,
             )
-            .map_err(|e| anyhow!("CreateDesktopW failed: {e}"))?
+            .map_err(|e| anyhow!("CreateDesktopW failed for '{name}': {e}"))?
         };
 
         // Keep the desktop alive with a long-running host process; the real
         // target app is launched later via `open`.
-        let process = spawn_on_desktop("cmd.exe", "/c ping -n 9999999 127.0.0.1 > nul")?;
+        let process = spawn_on_desktop(
+            "cmd.exe",
+            "/c ping -n 9999999 127.0.0.1 > nul",
+            &desktop_path_for(name),
+        )?;
 
-        Ok(Self { handle, process })
+        Ok(Self {
+            handle,
+            process,
+            name: name.to_string(),
+        })
+    }
+
+    /// The desktop's name (e.g. `PhantomWorker_2`).
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Open `target` on the hidden desktop. URLs are opened in the default
@@ -87,7 +114,7 @@ impl VirtualDesktop {
         } else {
             target.to_string()
         };
-        spawn_on_desktop("cmd.exe", &format!("/c {}", cmd))?;
+        spawn_on_desktop("cmd.exe", &format!("/c {}", cmd), &desktop_path_for(&self.name))?;
         Ok(())
     }
 
@@ -169,15 +196,36 @@ impl VirtualDesktop {
     }
 
     /// Capture the desktop's active window as a 24-bit BMP image.
+    ///
+    /// The capture runs on a **dedicated, freshly-spawned OS thread** pinned to
+    /// this desktop. `SetThreadDesktop` binds the *calling thread* to a desktop,
+    /// but Phantom drives desktops from `tokio` tasks that migrate across a
+    /// shared worker-thread pool — so a bind done for one worker leaks into
+    /// another and the switch is not deterministic. When several pooled desktops
+    /// are captured from that shared pool, two calls can end up reading the same
+    /// desktop (byte-identical captures). A brand-new thread has a clean desktop
+    /// association, so the bind takes effect and the capture is guaranteed to
+    /// come from *this* desktop.
     pub async fn screenshot(&self) -> Result<Vec<u8>> {
-        unsafe {
-            let _ = SetThreadDesktop(self.handle);
-            let hwnd = find_window();
-            if hwnd.is_invalid() {
-                return Err(anyhow!("no window to capture on hidden desktop"));
+        // `HDESK` is a raw pointer (not `Send`); move it across the thread
+        // boundary as an integer and rebuild it on the other side. The handle is
+        // a process-wide kernel object, valid from any thread.
+        let raw = self.handle.0 as isize;
+        std::thread::spawn(move || -> Result<Vec<u8>> {
+            unsafe {
+                let handle = HDESK(raw as *mut core::ffi::c_void);
+                // Non-fatal: on the single-desktop path the process desktop is
+                // already correct, so a bind failure must not regress capture.
+                let _ = SetThreadDesktop(handle);
+                let hwnd = find_window();
+                if hwnd.is_invalid() {
+                    return Err(anyhow!("no window to capture on hidden desktop"));
+                }
+                capture_window_bmp(hwnd)
             }
-            capture_window_bmp(hwnd)
-        }
+        })
+        .join()
+        .map_err(|_| anyhow!("screenshot capture thread panicked"))?
     }
 
     /// Close the host process and destroy the hidden desktop.
@@ -199,11 +247,12 @@ impl Drop for VirtualDesktop {
     }
 }
 
-/// Spawn `app` with `args` so its first thread lands on the hidden desktop.
-fn spawn_on_desktop(app: &str, args: &str) -> Result<PROCESS_INFORMATION> {
+/// Spawn `app` with `args` so its first thread lands on the desktop at
+/// `desktop_path` (a `WinSta0\<name>` string).
+fn spawn_on_desktop(app: &str, args: &str, desktop_path: &str) -> Result<PROCESS_INFORMATION> {
     let cmd = format!("{} {}", app, args);
     let mut cmd_vec = to_wide_owned(&cmd);
-    let mut desktop_vec = to_wide_owned(DESKTOP_PATH);
+    let mut desktop_vec = to_wide_owned(desktop_path);
 
     let mut si: STARTUPINFOW = unsafe { zeroed() };
     si.cb = mem::size_of::<STARTUPINFOW>() as u32;

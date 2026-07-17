@@ -57,6 +57,46 @@ jobs:
           path: ${{ runner.temp }}/shots/**
           if-no-files-found: warn
 
+  # Runtime verification of the V3 Phase B multi-desktop pool: stands up several
+  # isolated PhantomWorker_N desktops concurrently, drives Notepad on each,
+  # captures them, asserts the captures are non-blank + distinct, then returns
+  # the leases and re-acquires to prove warm desktops are reused (no new
+  # CreateDesktopW). Proves the pool the Master Planner swarm (Phase C) sits on.
+  pool-smoke:
+    name: Multi-desktop pool (runtime)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (MSVC)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build pool smoke harness
+        run: cargo build --release -p phantom-desktop --example pool_smoke
+
+      - name: Run multi-desktop pool smoke
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'pool-shots'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          & "target\release\examples\pool_smoke.exe" $dir
+          $code = $LASTEXITCODE
+          Write-Host "pool_smoke exit code: $code"
+          exit $code
+
+      - name: Upload pool screenshots + report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multi-desktop-pool-shots
+          path: ${{ runner.temp }}/pool-shots/**
+          if-no-files-found: warn
+
   # Full-stack check: the Python NVIDIA NIM provider decides every action from
   # real screenshots, driving the hidden desktop end-to-end (plan -> decide ->
   # execute). Proves the entire observe/decide/execute loop works on live

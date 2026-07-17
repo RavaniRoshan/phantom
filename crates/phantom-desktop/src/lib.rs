@@ -18,3 +18,9 @@ mod input;
 mod stub;
 #[cfg(not(windows))]
 pub use stub::VirtualDesktop;
+
+// The multi-desktop pool (V3 Phase B) is cross-platform: it is built on the
+// `VirtualDesktop` surface above (real on Windows, stub elsewhere), so the
+// workspace type-checks everywhere. Acquiring a worker only succeeds on Windows.
+mod pool;
+pub use pool::{recommended_workers, DesktopPool, WorkerLease, DEFAULT_RAM_PER_WORKER};
