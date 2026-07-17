@@ -19,6 +19,14 @@ impl VirtualDesktop {
         anyhow::bail!(UNAVAILABLE)
     }
 
+    pub async fn launch_named(_name: &str) -> Result<Self> {
+        anyhow::bail!(UNAVAILABLE)
+    }
+
+    pub fn name(&self) -> &str {
+        ""
+    }
+
     pub async fn open(&self, _target: &str) -> Result<()> {
         anyhow::bail!(UNAVAILABLE)
     }
