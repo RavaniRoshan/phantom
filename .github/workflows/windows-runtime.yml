@@ -56,3 +56,86 @@ jobs:
           name: invisible-desktop-shots
           path: ${{ runner.temp }}/shots/**
           if-no-files-found: warn
+
+  # Full-stack check: the Python NVIDIA NIM provider decides every action from
+  # real screenshots, driving the hidden desktop end-to-end (plan -> decide ->
+  # execute). Proves the entire observe/decide/execute loop works on live
+  # vision with zero lock-in. Uses the NVIDIA_API_KEY repo secret; never
+  # checked into the repo.
+  nvidia-e2e:
+    name: NVIDIA NIM drives hidden desktop (full stack)
+    runs-on: windows-latest
+    env:
+      PHANTOM_PROVIDER: nvidia
+      PHANTOM_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      PHANTOM_MODEL: meta/llama-3.2-90b-vision-instruct
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python service
+        working-directory: python
+        run: pip install -e . pytest
+
+      - name: Generate gRPC stubs
+        working-directory: python
+        run: python generate_proto.py
+
+      - name: Install Rust (MSVC)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build headless task runner
+        run: cargo build --release -p phantom-core --example headless_task
+
+      - name: Start Phantom LLM service (NVIDIA)
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'shots'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $env:PHANTOM_SHOT_DIR = $dir
+          # Start the gRPC service in the background; it reads PHANTOM_PROVIDER /
+          # PHANTOM_API_KEY from the env above.
+          Start-Process -NoNewWindow python -ArgumentList "-m","phantom_llm.server" `
+            -WorkingDirectory "$PWD/python" -RedirectStandardOutput "$env:RUNNER_TEMP\svc.log" `
+            -RedirectStandardError "$env:RUNNER_TEMP\svc.err"
+          # Wait for the port to come up.
+          for ($i=0; $i -lt 30; $i++) {
+            if (Test-NetConnection -ComputerName 127.0.0.1 -Port 50051 -InformationLevel Quiet) { break }
+            Start-Sleep -Seconds 1
+          }
+
+      - name: Run NVIDIA-driven desktop task
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'shots'
+          $env:PHANTOM_SHOT_DIR = $dir
+          & "target\release\examples\headless_task.exe" "Open Notepad and type 'hello phantom'" "http://127.0.0.1:50051"
+          $code = $LASTEXITCODE
+          Write-Host "headless_task exit code: $code"
+          exit $code
+
+      - name: Upload NVIDIA run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-e2e-shots
+          path: ${{ runner.temp }}/shots/**
+          if-no-files-found: warn
+
+      - name: Upload service logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-e2e-service-logs
+          path: ${{ runner.temp }}/svc.*
+          if-no-files-found: warn
