@@ -347,11 +347,12 @@ impl App {
         match idx {
             0 => self.config.provider.clone(),
             1 => self.config.mode.to_string(),
-            2 => self.config.llm_endpoint.clone(),
-            3 => self.config.api_key.clone(),
-            4 => self.config.grpc_endpoint.clone(),
-            5 => self.config.max_iterations.to_string(),
-            6 => self
+            2 => self.config.model.clone(),
+            3 => self.config.llm_endpoint.clone(),
+            4 => self.config.api_key.clone(),
+            5 => self.config.grpc_endpoint.clone(),
+            6 => self.config.max_iterations.to_string(),
+            7 => self
                 .config
                 .allowed_folders
                 .iter()
@@ -371,15 +372,16 @@ impl App {
                 Ok(m) => self.config.mode = m,
                 Err(e) => self.push(Msg::Error(e)),
             },
-            2 => self.config.llm_endpoint = v,
-            3 => self.config.api_key = v,
-            4 => self.config.grpc_endpoint = v,
-            5 => match v.parse::<u32>() {
+            2 => self.config.model = v,
+            3 => self.config.llm_endpoint = v,
+            4 => self.config.api_key = v,
+            5 => self.config.grpc_endpoint = v,
+            6 => match v.parse::<u32>() {
                 Ok(n) if n > 0 => self.config.max_iterations = n,
                 Ok(_) => self.push(Msg::Error("max_iterations must be > 0".into())),
                 Err(_) => self.push(Msg::Error("max_iterations must be a number".into())),
             },
-            6 => {
+            7 => {
                 self.config.allowed_folders = v
                     .split([';', ','])
                     .map(|s| s.trim())

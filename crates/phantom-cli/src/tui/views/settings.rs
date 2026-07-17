@@ -9,9 +9,10 @@ use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 /// Settings form fields, in display order. Indices must match the field
 /// handling in `app.rs` (`settings_field_value` / `commit_settings_field`).
 pub const SETTINGS_FIELDS: &[(&str, &str)] = &[
-    ("provider", "LLM provider (claude|openai|gemini|ollama|mock)"),
+    ("provider", "LLM provider (claude|openai|gemini|ollama|mock|nvidia)"),
     ("mode", "Operating mode (safe|hero)"),
-    ("llm_endpoint", "LLM base URL (Ollama / self-hosted)"),
+    ("model", "LLM model name (blank = provider default)"),
+    ("llm_endpoint", "LLM base URL (Ollama / self-hosted / NIM)"),
     ("api_key", "API key (or set env PHANTOM_API_KEY)"),
     ("grpc_endpoint", "gRPC LLM service address"),
     ("max_iterations", "Max DecideAction iterations per task"),
@@ -38,6 +39,7 @@ pub fn render_settings(
     let values: Vec<String> = vec![
         config.provider.clone(),
         config.mode.to_string(),
+        config.model.clone(),
         config.llm_endpoint.clone(),
         if config.api_key.is_empty() {
             key_hint.to_string()

@@ -258,6 +258,26 @@ impl Agent {
                     _ => Err("desktop 'click' requires numeric 'x' and 'y'".to_string()),
                 }
             }
+            "type_text" => {
+                let text = action.params.get("text").cloned();
+                let x = action
+                    .params
+                    .get("x")
+                    .and_then(|v| v.parse::<i32>().ok())
+                    .unwrap_or(0);
+                let y = action
+                    .params
+                    .get("y")
+                    .and_then(|v| v.parse::<i32>().ok())
+                    .unwrap_or(0);
+                match text {
+                    Some(t) => match desktop.type_text(&t, x, y).await {
+                        Ok(()) => Ok(()),
+                        Err(e) => Err(e.to_string()),
+                    },
+                    None => Err("desktop 'type_text' requires 'text'".to_string()),
+                }
+            }
             "screenshot" => match desktop.screenshot().await {
                 Ok(bytes) => {
                     return StepOutcome {

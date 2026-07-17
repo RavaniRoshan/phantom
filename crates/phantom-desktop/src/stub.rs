@@ -27,6 +27,10 @@ impl VirtualDesktop {
         anyhow::bail!(UNAVAILABLE)
     }
 
+    pub async fn type_text(&self, _text: &str, _x: i32, _y: i32) -> Result<()> {
+        anyhow::bail!(UNAVAILABLE)
+    }
+
     pub async fn screenshot(&self) -> Result<Vec<u8>> {
         anyhow::bail!(UNAVAILABLE)
     }

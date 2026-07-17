@@ -11,6 +11,9 @@ mod desktop;
 #[cfg(windows)]
 pub use desktop::VirtualDesktop;
 
+#[cfg(windows)]
+mod input;
+
 #[cfg(not(windows))]
 mod stub;
 #[cfg(not(windows))]

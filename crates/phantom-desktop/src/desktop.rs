@@ -24,13 +24,11 @@ use windows::Win32::System::StationsAndDesktops::{
 use windows::Win32::System::Threading::{
     CreateProcessW, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTUPINFOW, TerminateProcess,
 };
-use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_MOUSE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSE_EVENT_FLAGS,
-};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClientRect, GetForegroundWindow, PostMessageW, SetForegroundWindow, ShowWindow, SW_RESTORE,
-    WM_LBUTTONDOWN, WM_LBUTTONUP,
+    EnumWindows, GetClientRect, GetForegroundWindow, IsWindowVisible, PostMessageW,
+    SetForegroundWindow, ShowWindow, SW_RESTORE, WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
+use crate::input;
 
 /// Name of the hidden desktop Phantom creates and tears down.
 const DESKTOP_NAME: &str = "PhantomDesktop";
@@ -92,11 +90,22 @@ impl VirtualDesktop {
         Ok(())
     }
 
-    /// Click at viewport coordinates on the desktop's foreground window.
+    /// Click at viewport coordinates on the hidden desktop.
+    ///
+    /// UIA-first: resolve the control at `(x, y)` and `Invoke` it through the
+    /// accessibility contract (no focus theft, works on a non-foreground
+    /// desktop). Falls back to `PostMessage` + `SendInput` if UIA cannot service
+    /// the control.
     pub async fn click(&self, x: i32, y: i32) -> Result<()> {
         unsafe {
-            // Attach this thread to the hidden desktop so input lands there.
             let _ = SetThreadDesktop(self.handle);
+        }
+        // Primary: UIA Invoke at the point.
+        if input::uia_click(x, y).is_ok() {
+            return Ok(());
+        }
+        // Fallback: window-message + raw injected click on the foreground window.
+        unsafe {
             let hwnd = GetForegroundWindow();
             if hwnd.is_invalid() {
                 return Err(anyhow!("no foreground window on hidden desktop"));
@@ -104,22 +113,45 @@ impl VirtualDesktop {
             let _ = ShowWindow(hwnd, SW_RESTORE);
             let _ = SetForegroundWindow(hwnd);
 
-            // Window-message click, then a global injected click as a fallback.
             let _ = PostMessageW(hwnd, WM_LBUTTONDOWN, WPARAM(0), LPARAM(0));
             let _ = PostMessageW(hwnd, WM_LBUTTONUP, WPARAM(0), LPARAM(0));
 
-            let down = mouse_input(MOUSEEVENTF_LEFTDOWN, x, y);
-            let up = mouse_input(MOUSEEVENTF_LEFTUP, x, y);
-            let _ = SendInput(&[down], mem::size_of::<INPUT>() as i32);
-            let _ = SendInput(&[up], mem::size_of::<INPUT>() as i32);
+            // Raw injected click as a final fallback.
+            input::send_input_click(x, y);
         }
         Ok(())
     }
 
-    /// Capture the desktop's foreground window as a 24-bit BMP image.
-    pub async fn screenshot(&self) -> Result<Vec<u8>> {
+    /// Type `text` into the control at viewport coordinates `(x, y)`.
+    ///
+    /// UIA-first: set the control's value through `ValuePattern.SetValue`, which
+    /// writes the string directly without requiring focus or keystrokes — the
+    /// only reliable way to type onto a hidden desktop. Falls back to Unicode
+    /// `SendInput` keystrokes (and a `WM_CHAR` post) when the control exposes no
+    /// Value pattern.
+    pub async fn type_text(&self, text: &str, x: i32, y: i32) -> Result<()> {
+        unsafe {
+            let _ = SetThreadDesktop(self.handle);
+        }
+        if input::uia_set_text(x, y, text).is_ok() {
+            return Ok(());
+        }
+        // Fallback: best-effort keystroke injection.
+        input::send_input_text(text);
         unsafe {
             let hwnd = GetForegroundWindow();
+            if !hwnd.is_invalid() {
+                input::post_chars(hwnd, text);
+            }
+        }
+        Ok(())
+    }
+
+    /// Capture the desktop's active window as a 24-bit BMP image.
+    pub async fn screenshot(&self) -> Result<Vec<u8>> {
+        unsafe {
+            let _ = SetThreadDesktop(self.handle);
+            let hwnd = find_window();
             if hwnd.is_invalid() {
                 return Err(anyhow!("no window to capture on hidden desktop"));
             }
@@ -175,19 +207,6 @@ fn spawn_on_desktop(app: &str, args: &str) -> Result<PROCESS_INFORMATION> {
         return Err(anyhow!("CreateProcessW failed on hidden desktop"));
     }
     Ok(pi)
-}
-
-/// Build a `MOUSEINPUT` wrapped in `INPUT` for `SendInput`.
-unsafe fn mouse_input(flags: MOUSE_EVENT_FLAGS, x: i32, y: i32) -> INPUT {
-    let mut input: INPUT = zeroed();
-    input.r#type = INPUT_MOUSE;
-    input.Anonymous.mi.dx = x;
-    input.Anonymous.mi.dy = y;
-    input.Anonymous.mi.dwFlags = flags;
-    input.Anonymous.mi.mouseData = 0;
-    input.Anonymous.mi.dwExtraInfo = 0;
-    input.Anonymous.mi.time = 0;
-    input
 }
 
 /// Capture `hwnd` to an in-memory 24-bit BMP and return the file bytes.
@@ -263,6 +282,33 @@ unsafe fn window_size(hwnd: HWND) -> Result<(i32, i32)> {
     let mut rect = zeroed();
     let _ = GetClientRect(hwnd, &mut rect);
     Ok((rect.right - rect.left, rect.bottom - rect.top))
+}
+
+/// Find the best window to act on within the current thread's desktop.
+///
+/// Enumerates top-level windows and returns the first visible one with a
+/// non-empty client area (i.e. a real app window, not the desktop shell). Falls
+/// back to the foreground window if enumeration finds nothing. Called after
+/// `SetThreadDesktop` so it sees the hidden desktop's windows.
+unsafe fn find_window() -> HWND {
+    unsafe extern "system" fn cb(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let slot = &mut *(lparam.0 as *mut Option<HWND>);
+        if IsWindowVisible(hwnd).as_bool() {
+            let mut rect = zeroed();
+            if GetClientRect(hwnd, &mut rect).is_ok()
+                && (rect.right - rect.left) > 0
+                && (rect.bottom - rect.top) > 0
+            {
+                *slot = Some(hwnd);
+                return BOOL(0); // stop: first match wins
+            }
+        }
+        BOOL(1)
+    }
+
+    let mut found: Option<HWND> = None;
+    let _ = EnumWindows(Some(cb), LPARAM(&mut found as *mut _ as isize));
+    found.unwrap_or_else(|| GetForegroundWindow())
 }
 
 /// Allocate a null-terminated wide string.

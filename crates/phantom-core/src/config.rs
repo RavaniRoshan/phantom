@@ -36,8 +36,10 @@ impl std::str::FromStr for Mode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
-    /// Active LLM provider: claude | openai | gemini | ollama.
+    /// Active LLM provider: claude | openai | gemini | ollama | nvidia | mock.
     pub provider: String,
+    /// Optional model override. Blank means "use the provider's default model".
+    pub model: String,
     /// Override for the LLM provider base URL (used by Ollama / self-hosted).
     pub llm_endpoint: String,
     /// API key. Prefer supplying via env var `PHANTOM_API_KEY`; this falls back to the file.
@@ -56,6 +58,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             provider: "claude".to_string(),
+            model: String::new(),
             llm_endpoint: String::new(),
             api_key: String::new(),
             mode: Mode::Safe,
@@ -139,3 +142,36 @@ fn default_allowed_folders() -> Vec<PathBuf> {
     folders.push(home.join("phantom-work"));
     folders
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn model_field_round_trips_through_toml() {
+        let mut cfg = Config::default();
+        cfg.provider = "nvidia".to_string();
+        cfg.model = "meta/llama-3.2-90b-vision-instruct".to_string();
+        cfg.mode = Mode::Hero;
+
+        let path = std::env::temp_dir().join("phantom-config-test.toml");
+        let _ = std::fs::remove_file(&path);
+        cfg.save(&path).expect("save");
+        let loaded = Config::load(&path).expect("load");
+
+        assert_eq!(loaded.provider, "nvidia");
+        assert_eq!(loaded.model, "meta/llama-3.2-90b-vision-instruct");
+        assert_eq!(loaded.mode, Mode::Hero);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn missing_file_returns_default() {
+        let path = std::env::temp_dir().join("phantom-config-does-not-exist.toml");
+        let _ = std::fs::remove_file(&path);
+        let cfg = Config::load(&path).expect("load default");
+        assert_eq!(cfg.provider, "claude");
+        assert!(cfg.model.is_empty());
+    }
+}
+
