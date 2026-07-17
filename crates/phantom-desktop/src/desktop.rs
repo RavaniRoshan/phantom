@@ -23,9 +23,10 @@ use windows::Win32::System::StationsAndDesktops::{
 };
 use windows::Win32::System::Threading::{
     CreateProcessW, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTUPINFOW, TerminateProcess,
+    Sleep,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetClientRect, GetForegroundWindow, IsWindowVisible, PostMessageW,
+    EnumWindows, FindWindowExW, GetClientRect, GetForegroundWindow, IsWindowVisible, PostMessageW,
     SetForegroundWindow, ShowWindow, SW_RESTORE, WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
 use crate::input;
@@ -133,14 +134,27 @@ impl VirtualDesktop {
         unsafe {
             let _ = SetThreadDesktop(self.handle);
         }
+        // Primary: UIA value injection (no focus needed). On a service-session
+        // hidden desktop UIA may be unavailable, in which case we fall through.
         if input::uia_set_text(x, y, text).is_ok() {
             return Ok(());
         }
-        // Fallback: best-effort keystroke injection.
-        input::send_input_text(text);
-        unsafe {
-            let hwnd = GetForegroundWindow();
-            if !hwnd.is_invalid() {
+        // Fallback: bring the real target app to the foreground and inject
+        // keystrokes into it. We resolve the actual Notepad window handle rather
+        // than trusting the ambient foreground window, which on a hidden desktop
+        // could be the host process.
+        if let Some(hwnd) = unsafe { notepad_window() } {
+            unsafe {
+                let _ = ShowWindow(hwnd, SW_RESTORE);
+                let _ = SetForegroundWindow(hwnd);
+            }
+            // Give the foreground switch a moment to take effect before SendInput.
+            #[allow(unused_unsafe)]
+            unsafe {
+                Sleep(250);
+            }
+            input::send_input_text(text);
+            unsafe {
                 input::post_chars(hwnd, text);
             }
         }
@@ -309,6 +323,17 @@ unsafe fn find_window() -> HWND {
     let mut found: Option<HWND> = None;
     let _ = EnumWindows(Some(cb), LPARAM(&mut found as *mut _ as isize));
     found.unwrap_or_else(|| GetForegroundWindow())
+}
+
+/// Resolve Notepad's top-level window handle on the current thread's desktop.
+///
+/// We match by class name (`Notepad`) rather than title so it works for an
+/// untitled / freshly-launched instance. Returns `None` if no Notepad window
+/// is present (e.g. on a background hidden desktop with only the host process).
+unsafe fn notepad_window() -> Option<HWND> {
+    let class = to_wide_owned("Notepad");
+    let hwnd = FindWindowExW(None, None, windows::core::PCWSTR(class.as_ptr()), None).ok()?;
+    if hwnd.is_invalid() { None } else { Some(hwnd) }
 }
 
 /// Allocate a null-terminated wide string.
