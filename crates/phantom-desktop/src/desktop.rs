@@ -196,15 +196,36 @@ impl VirtualDesktop {
     }
 
     /// Capture the desktop's active window as a 24-bit BMP image.
+    ///
+    /// The capture runs on a **dedicated, freshly-spawned OS thread** pinned to
+    /// this desktop. `SetThreadDesktop` binds the *calling thread* to a desktop,
+    /// but Phantom drives desktops from `tokio` tasks that migrate across a
+    /// shared worker-thread pool — so a bind done for one worker leaks into
+    /// another and the switch is not deterministic. When several pooled desktops
+    /// are captured from that shared pool, two calls can end up reading the same
+    /// desktop (byte-identical captures). A brand-new thread has a clean desktop
+    /// association, so the bind takes effect and the capture is guaranteed to
+    /// come from *this* desktop.
     pub async fn screenshot(&self) -> Result<Vec<u8>> {
-        unsafe {
-            let _ = SetThreadDesktop(self.handle);
-            let hwnd = find_window();
-            if hwnd.is_invalid() {
-                return Err(anyhow!("no window to capture on hidden desktop"));
+        // `HDESK` is a raw pointer (not `Send`); move it across the thread
+        // boundary as an integer and rebuild it on the other side. The handle is
+        // a process-wide kernel object, valid from any thread.
+        let raw = self.handle.0 as isize;
+        std::thread::spawn(move || -> Result<Vec<u8>> {
+            unsafe {
+                let handle = HDESK(raw as *mut core::ffi::c_void);
+                // Non-fatal: on the single-desktop path the process desktop is
+                // already correct, so a bind failure must not regress capture.
+                let _ = SetThreadDesktop(handle);
+                let hwnd = find_window();
+                if hwnd.is_invalid() {
+                    return Err(anyhow!("no window to capture on hidden desktop"));
+                }
+                capture_window_bmp(hwnd)
             }
-            capture_window_bmp(hwnd)
-        }
+        })
+        .join()
+        .map_err(|_| anyhow!("screenshot capture thread panicked"))?
     }
 
     /// Close the host process and destroy the hidden desktop.
