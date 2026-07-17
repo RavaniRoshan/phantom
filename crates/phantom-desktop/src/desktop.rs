@@ -11,7 +11,7 @@
 
 use anyhow::{anyhow, Result};
 use std::mem::{self, zeroed};
-use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
     ReleaseDC, SelectObject, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, HBITMAP, HDC,
@@ -98,8 +98,8 @@ impl VirtualDesktop {
             let _ = PostMessageW(hwnd, WM_LBUTTONDOWN, WPARAM(0), LPARAM(0));
             let _ = PostMessageW(hwnd, WM_LBUTTONUP, WPARAM(0), LPARAM(0));
 
-            let mut down = mouse_input(MOUSEEVENTF_LEFTDOWN, x, y);
-            let mut up = mouse_input(MOUSEEVENTF_LEFTUP, x, y);
+            let down = mouse_input(MOUSEEVENTF_LEFTDOWN, x, y);
+            let up = mouse_input(MOUSEEVENTF_LEFTUP, x, y);
             let _ = SendInput(&[down], mem::size_of::<INPUT>() as i32);
             let _ = SendInput(&[up], mem::size_of::<INPUT>() as i32);
         }
@@ -153,7 +153,7 @@ fn spawn_on_desktop(app: &str, args: &str) -> Result<PROCESS_INFORMATION> {
             windows::core::PWSTR(cmd_vec.as_mut_ptr()),
             None,
             None,
-            false.into(),
+            BOOL(0),
             PROCESS_CREATION_FLAGS(0),
             None,
             None,
