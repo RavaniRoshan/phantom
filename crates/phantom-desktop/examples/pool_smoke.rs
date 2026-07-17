@@ -79,6 +79,21 @@ async fn main() {
     // Give Notepad time to create its window on each hidden desktop.
     tokio::time::sleep(Duration::from_secs(4)).await;
 
+    // 1b. Type a UNIQUE marker into each worker's Notepad. Two freshly-opened,
+    //     empty Notepad windows are pixel-identical (same size, same blank white
+    //     client area), so without distinct content their captures would match
+    //     even though the desktops are fully isolated. Writing a per-worker
+    //     marker makes the captures genuinely differ, turning the distinctness
+    //     check into a real proof that each capture came from its own desktop.
+    for (i, lease) in leases.iter().enumerate() {
+        let marker = format!("PHANTOM WORKER {i} :: isolated hidden desktop capture proof");
+        if let Err(e) = lease.type_text(&marker, 0, 0).await {
+            log!("[warn] type marker on #{i}: {e}");
+        }
+    }
+    // Let the text render before capturing.
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
     // 2. Capture each desktop and check the captures are non-blank & distinct.
     let mut shots: Vec<Vec<u8>> = Vec::new();
     let mut all_non_blank = true;
