@@ -13,6 +13,10 @@ venv/
 build/
 dist/
 
+# Generated gRPC stubs (regenerated from proto/phantom.proto via generate_proto.py)
+python/phantom_pb2.py
+python/phantom_pb2_grpc.py
+
 # Phantom runtime
 .phantom/
 *.log

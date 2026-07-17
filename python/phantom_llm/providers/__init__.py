@@ -7,6 +7,9 @@ _PROVIDERS = {
     "openai": "openai:OpenAIProvider",
     "gemini": "gemini:GeminiProvider",
     "ollama": "ollama:OllamaProvider",
+    # Offline, deterministic, SDK-free provider — runs the whole stack without
+    # an API key. Used for end-to-end tests and demos.
+    "mock": "mock:MockProvider",
 }
 
 

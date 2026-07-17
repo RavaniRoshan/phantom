@@ -9,7 +9,7 @@ use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 /// Settings form fields, in display order. Indices must match the field
 /// handling in `app.rs` (`settings_field_value` / `commit_settings_field`).
 pub const SETTINGS_FIELDS: &[(&str, &str)] = &[
-    ("provider", "LLM provider (claude|openai|gemini|ollama)"),
+    ("provider", "LLM provider (claude|openai|gemini|ollama|mock)"),
     ("mode", "Operating mode (safe|hero)"),
     ("llm_endpoint", "LLM base URL (Ollama / self-hosted)"),
     ("api_key", "API key (or set env PHANTOM_API_KEY)"),

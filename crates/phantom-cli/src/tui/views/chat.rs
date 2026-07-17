@@ -52,7 +52,7 @@ Phantom commands
 /settings        open the settings page
 /safe            switch to Safe mode (restricted)
 /hero            switch to Hero mode (full access)
-/provider <name> set LLM provider (claude|openai|gemini|ollama)
+/provider <name> set LLM provider (claude|openai|gemini|ollama|mock)
 /mode <safe|hero> switch mode
 /clear           clear the transcript
 /quit            exit Phantom
