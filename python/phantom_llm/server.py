@@ -100,7 +100,10 @@ async def _serve() -> None:
         PhantomLLMServicer(provider), server
     )
     port = os.environ.get("PHANTOM_GRPC_PORT", "50051")
-    server.add_insecure_port(f"[::]:{port}")
+    # Bind IPv4 wildcard so the Rust gRPC client (which connects to the IPv4
+    # loopback 127.0.0.1) always reaches it, including on Windows runners where
+    # an IPv6-only `[::]` listener can be unreachable over IPv4.
+    server.add_insecure_port(f"0.0.0.0:{port}")
     await server.start()
     log.info("listening on [::]:%s", port)
     await server.wait_for_termination()

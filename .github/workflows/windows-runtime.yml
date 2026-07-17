@@ -97,28 +97,34 @@ jobs:
       - name: Build headless task runner
         run: cargo build --release -p phantom-core --example headless_task
 
-      - name: Start Phantom LLM service (NVIDIA)
+      - name: Run NVIDIA-driven desktop task (service + task)
         shell: pwsh
         run: |
           $dir = Join-Path $env:RUNNER_TEMP 'shots'
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
           $env:PHANTOM_SHOT_DIR = $dir
-          # Start the gRPC service in the background; it reads PHANTOM_PROVIDER /
-          # PHANTOM_API_KEY from the env above.
+
+          # Start the gRPC service in the background, then run the task in the
+          # SAME step. A process spawned with `Start-Process` is reaped when the
+          # step's shell exits, so launching the server in its own step (and the
+          # task in the next) left the server dead by the time the client
+          # connected — that was the earlier "transport error" failure.
           Start-Process -NoNewWindow python -ArgumentList "-m","phantom_llm.server" `
             -WorkingDirectory "$PWD/python" -RedirectStandardOutput "$env:RUNNER_TEMP\svc.log" `
             -RedirectStandardError "$env:RUNNER_TEMP\svc.err"
-          # Wait for the port to come up.
-          for ($i=0; $i -lt 30; $i++) {
-            if (Test-NetConnection -ComputerName 127.0.0.1 -Port 50051 -InformationLevel Quiet) { break }
+
+          # Wait for the port to come up (give the model cold-start room).
+          $up = $false
+          for ($i=0; $i -lt 90; $i++) {
+            if (Test-NetConnection -ComputerName 127.0.0.1 -Port 50051 -InformationLevel Quiet) { $up = $true; break }
             Start-Sleep -Seconds 1
           }
+          if (-not $up) {
+            Write-Host "ERROR: LLM service did not come up on :50051"
+            Get-Content "$env:RUNNER_TEMP\svc.err" -ErrorAction SilentlyContinue
+            exit 1
+          }
 
-      - name: Run NVIDIA-driven desktop task
-        shell: pwsh
-        run: |
-          $dir = Join-Path $env:RUNNER_TEMP 'shots'
-          $env:PHANTOM_SHOT_DIR = $dir
           & "target\release\examples\headless_task.exe" "Open Notepad and type 'hello phantom'" "http://127.0.0.1:50051"
           $code = $LASTEXITCODE
           Write-Host "headless_task exit code: $code"
