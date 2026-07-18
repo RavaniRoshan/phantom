@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/phantom-mascot.svg" alt="Phantom mascot" width="120">
+</p>
+
 # Phantom
 
 > The background-mode computer-use agent that works while you don't watch.
