@@ -42,7 +42,7 @@ impl Sandbox {
         }
         let target = normalize(path);
         for root in &self.allowed {
-            if target.starts_with(&normalize(root)) {
+            if target.starts_with(normalize(root)) {
                 return Ok(());
             }
         }

@@ -11,7 +11,16 @@ imported by every provider adapter without pulling in provider SDKs.
 from __future__ import annotations
 
 import base64
+import math
 from typing import Any
+
+# Fallback confidence when a provider does not report one. Most tool-calling
+# models (Claude, GPT-4o, Gemini, Ollama) do not fill the optional `confidence`
+# field, so without this they would arrive as 0.0 and the Rust-side autonomy
+# gate would pause/skip EVERY action. "Model didn't say" must mean "moderately
+# confident" — high enough to auto-run under the default 0.70 gate, low enough
+# that an explicit low score from a provider (mock, nvidia) still stands out.
+DEFAULT_CONFIDENCE = 0.85
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +90,12 @@ PLAN_SCHEMA: dict[str, Any] = {
 # Tool descriptors (provider-neutral "name/description/parameters" shape).
 ACTION_TOOL: dict[str, Any] = {
     "name": "phantom_action",
-    "description": "Carry out the next step of the user's task using one capability.",
+    "description": (
+        "Carry out the next step of the user's task using one capability. "
+        "Always include a `confidence` between 0 and 1 expressing how sure you "
+        "are the action is correct; use a lower value when the screen state is "
+        "ambiguous so a human can review it."
+    ),
     "parameters": CANONICAL_ACTION_SCHEMA,
 }
 
@@ -128,10 +142,18 @@ def normalize_action_dict(d: Any) -> dict[str, Any]:
     d.setdefault("action", "done")
     d.setdefault("params", {})
     d.setdefault("reasoning", "")
+    # Resolve confidence: honour an explicit, valid, in-range value; otherwise
+    # substitute a sane default so a provider that omits it (or reports 0 /
+    # NaN / garbage) does not trip the autonomy gate on every action. A `done`
+    # action is always fully confident (nothing left to risk).
+    raw_conf = d.get("confidence", None)
     try:
-        d["confidence"] = float(d.get("confidence", 0.0))
+        conf = float(raw_conf) if raw_conf is not None else None
     except (TypeError, ValueError):
-        d["confidence"] = 0.0
+        conf = None
+    if conf is None or not math.isfinite(conf) or conf <= 0.0:
+        conf = 1.0 if d["action_type"] == "done" else DEFAULT_CONFIDENCE
+    d["confidence"] = max(0.0, min(1.0, conf))
     params = d["params"]
     d["params"] = (
         {str(k): str(v) for k, v in params.items()}

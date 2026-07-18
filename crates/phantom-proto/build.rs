@@ -13,7 +13,7 @@ fn main() {
 
     tonic_build::configure()
         .build_server(false) // Rust side is the gRPC client only
-        .compile_protos(&[proto_file.clone()], &[proto_dir])
+        .compile_protos(std::slice::from_ref(&proto_file), &[proto_dir])
         .expect("Failed to compile proto/phantom.proto");
 
     println!("cargo:rerun-if-changed={}", proto_file.display());

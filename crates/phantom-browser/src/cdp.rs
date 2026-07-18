@@ -130,7 +130,7 @@ impl BrowserBackend {
         let (browser, mut handler) = Browser::launch(config).await?;
 
         let handler_task = tokio::spawn(async move {
-            while let Some(_) = handler.next().await {}
+            while handler.next().await.is_some() {}
         });
 
         let page = browser.new_page("about:blank").await?;

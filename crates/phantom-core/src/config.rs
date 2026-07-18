@@ -59,6 +59,11 @@ pub struct Config {
     /// mode an action the LLM is *less* confident than this about is paused
     /// for human approval (if a TUI is attached) or skipped (headless). Hero
     /// mode ignores the gate. `0.0` disables it (everything auto-runs).
+    ///
+    /// Default `0.70`: real LLM confidences cluster in 0.6–0.9, so this
+    /// pauses only genuinely-unsure steps while letting routine actions run.
+    /// Paired with the service-side fallback (a provider that omits confidence
+    /// reports ~0.85), so the gate never blocks the whole loop by default.
     pub confidence_gate: f32,
 }
 
@@ -74,7 +79,7 @@ impl Default for Config {
             grpc_endpoint: "http://127.0.0.1:50051".to_string(),
             max_iterations: 25,
             max_parallel_workers: 4,
-            confidence_gate: 0.95,
+            confidence_gate: 0.70,
         }
     }
 }
