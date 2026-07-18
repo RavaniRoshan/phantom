@@ -52,6 +52,9 @@ pub struct Config {
     pub grpc_endpoint: String,
     /// Upper bound on DecideAction iterations per task.
     pub max_iterations: u32,
+    /// Upper bound on concurrent workers the Master Planner may run at once.
+    /// The effective count is further capped by available RAM (~2 GiB/worker).
+    pub max_parallel_workers: u32,
 }
 
 impl Default for Config {
@@ -65,6 +68,7 @@ impl Default for Config {
             allowed_folders: default_allowed_folders(),
             grpc_endpoint: "http://127.0.0.1:50051".to_string(),
             max_iterations: 25,
+            max_parallel_workers: 4,
         }
     }
 }
@@ -119,6 +123,9 @@ impl Config {
         }
         if self.max_iterations == 0 {
             self.max_iterations = 25;
+        }
+        if self.max_parallel_workers == 0 {
+            self.max_parallel_workers = 4;
         }
         if self.allowed_folders.is_empty() {
             self.allowed_folders = default_allowed_folders();
