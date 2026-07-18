@@ -1,5 +1,6 @@
 //! The OmniAgent brain: plans a task, then runs the observe→decide→execute loop.
 
+use crate::approval::{ApprovalDecision, ApprovalQueue};
 use crate::client::PhantomClient;
 use crate::config::{Config, Mode};
 use crate::security::Security;
@@ -35,6 +36,11 @@ pub struct Agent {
     /// Master Planner set a unique name (`PhantomWorker_N`) so their desktops
     /// don't collide; the default single-agent path uses `PhantomDesktop`.
     desktop_name: String,
+    /// Optional HITL approval queue (Phase D). When `Some`, actions below
+    /// the confidence gate are paused and enqueued for a human verdict instead
+    /// of executing. `None` (daemon, swarm workers) means no human is in
+    /// the loop, so uncertain actions are skipped rather than hung.
+    approval: Option<ApprovalQueue>,
 }
 
 impl Agent {
@@ -48,6 +54,7 @@ impl Agent {
             #[cfg(windows)]
             desktop: Arc::new(Mutex::new(None)),
             desktop_name: "PhantomDesktop".to_string(),
+            approval: None,
         }
     }
 
@@ -55,6 +62,17 @@ impl Agent {
     /// Master Planner to isolate each worker on its own `PhantomWorker_N`.
     pub fn set_desktop_name(&mut self, name: impl Into<String>) {
         self.desktop_name = name.into();
+    }
+
+    /// Attach (or clear) the HITL approval queue. A `Some` queue enables the
+    /// Phase D confidence gate; `None` makes the gate skip uncertain actions.
+    pub fn set_approval_queue(&mut self, queue: Option<ApprovalQueue>) {
+        self.approval = queue;
+    }
+
+    /// Update the autonomy confidence gate at runtime (mirrors [`Agent::set_mode`]).
+    pub fn set_confidence_gate(&mut self, gate: f32) {
+        self.config.confidence_gate = gate.clamp(0.0, 1.0);
     }
 
     /// Update the active mode (Safe/Hero) at runtime.
@@ -143,6 +161,52 @@ impl Agent {
             };
             tx.send(AgentEvent::Action(action.clone())).await.ok();
 
+            // Confidence gate (Phase D). In Safe mode, an action the model is
+            // less confident than the gate about is paused for a human verdict
+            // (if a TUI queue is attached) or skipped (headless). Hero mode
+            // and `done` actions bypass the gate entirely.
+            if self.needs_approval(&action) {
+                let verdict = match &self.approval {
+                    Some(q) => q.enqueue(action.clone()).await,
+                    None => {
+                        // No human in the loop: never blindly run an uncertain
+                        // action. Record it as failed and keep the loop alive.
+                        let reason = format!(
+                            "confidence {:.0}% < gate {:.0}%, no human to approve",
+                            action.confidence * 100.0,
+                            self.config.confidence_gate * 100.0
+                        );
+                        tx.send(AgentEvent::Action(label_action(&action, false)))
+                            .await
+                            .ok();
+                        history.push((
+                            format!("{}/{}", action.action_type, action.action),
+                            reason.clone(),
+                            false,
+                        ));
+                        last_context = reason;
+                        continue;
+                    }
+                };
+                match verdict {
+                    ApprovalDecision::Reject => {
+                        let reason = "rejected by operator".to_string();
+                        tx.send(AgentEvent::Action(label_action(&action, false)))
+                            .await
+                            .ok();
+                        history.push((
+                            format!("{}/{}", action.action_type, action.action),
+                            reason.clone(),
+                            false,
+                        ));
+                        last_context = reason;
+                        continue;
+                    }
+                    // Approve: fall through to execute the action as proposed.
+                    ApprovalDecision::Approve => {}
+                }
+            }
+
             if action.action_type == "done" {
                 tx.send(AgentEvent::Result(action.reasoning.clone())).await.ok();
                 break;
@@ -167,6 +231,26 @@ impl Agent {
         }
 
         Ok(())
+    }
+
+    /// Whether `action` must be held for human approval before executing.
+    ///
+    /// Returns `true` only when *all* of: the agent is in Safe mode (Hero
+    /// is fully autonomous), the action is not the terminal `done`, the gate is
+    /// enabled (a finite value in `(0, 1]`), and the model's `confidence`
+    /// is below that gate.
+    fn needs_approval(&self, action: &ActionResponse) -> bool {
+        if self.config.mode == Mode::Hero {
+            return false;
+        }
+        if action.action_type == "done" {
+            return false;
+        }
+        let gate = self.config.confidence_gate;
+        if !gate.is_finite() || gate <= 0.0 || gate > 1.0 {
+            return false; // disabled
+        }
+        action.confidence < gate
     }
 
     /// Dispatch an action to the correct backend.

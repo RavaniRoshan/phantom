@@ -60,8 +60,10 @@ Phantom commands
 /clear           clear the transcript
 /quit            exit Phantom
 ─────────────────────────────────────────────
-Type a task in plain language and Phantom will
-plan and (in later phases) execute it for you.";
+In Safe mode, actions the model is unsure of (below the
+confidence_gate) pause for review: ↑/↓ select, Enter approve,
+r reject, a/x approve/reject all. Hero mode acts on its own.";
+
     let lines: Vec<Line> = text.lines().map(|l| Line::from(l.to_string())).collect();
     let p = Paragraph::new(lines)
         .block(Block::default().borders(Borders::ALL).title(" Help "))
