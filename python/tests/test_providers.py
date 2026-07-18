@@ -38,7 +38,18 @@ def test_normalize_action_dict_defaults():
     assert d["action_type"] == "done"
     assert d["action"] == "done"
     assert d["params"] == {}
-    assert d["confidence"] == 0.0
+    # An empty dict normalizes to a `done` action, which is always fully
+    # confident (nothing left to risk). A real non-done action with no
+    # confidence falls back to DEFAULT_CONFIDENCE (0.85) on the server.
+    assert d["confidence"] == 1.0
+
+
+def test_normalize_action_dict_missing_confidence_falls_back():
+    # A non-done action whose provider omitted confidence must NOT land at 0.0
+    # (that would trip the autonomy gate on every action); it falls back to
+    # DEFAULT_CONFIDENCE so the agent can still progress in Safe mode.
+    d = normalize_action_dict({"action_type": "file", "action": "read_file", "params": {"path": "x"}})
+    assert d["confidence"] == 0.85
 
 
 def test_normalize_plan_dict_orders_and_fills():

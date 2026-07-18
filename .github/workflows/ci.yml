@@ -50,6 +50,15 @@ jobs:
           PHANTOM_PROVIDER=mock python -c "import phantom_llm.server as s; print('server import OK')"
           python -m pytest tests/ -q
 
+      # Whole-stack integration: boot the real Python gRPC service (mock
+      # provider, no API key) and drive the real Rust agent↔client loop over
+      # the cross-platform `file` backend. Gated by PHANTOM_E2E=1 so a
+      # normal `cargo test` is unaffected. Proves the confidence gate and
+      # Approval Queue engage correctly end-to-end (see tests/e2e_mock.rs).
+      - name: End-to-end integration test (Rust ↔ gRPC ↔ Python)
+        run: |
+          PHANTOM_E2E=1 PHANTOM_PYTHON=python cargo test -p phantom-core --test e2e_mock -- --test-threads=1
+
   windows:
     name: Windows — real desktop backend compile
     runs-on: windows-latest

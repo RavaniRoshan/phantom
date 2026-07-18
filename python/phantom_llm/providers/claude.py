@@ -40,7 +40,12 @@ class ClaudeProvider(LLMProvider):
     def _action_tool(self) -> dict:
         return {
             "name": "phantom_action",
-            "description": "Carry out the next step of the user's task using one capability.",
+            "description": (
+                "Carry out the next step of the user's task using one capability. "
+                "Always include a `confidence` between 0 and 1 expressing how sure "
+                "you are the action is correct; use a lower value when the screen "
+                "state is ambiguous so a human can review it."
+            ),
             "input_schema": CANONICAL_ACTION_SCHEMA,
         }
 

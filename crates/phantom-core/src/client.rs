@@ -2,7 +2,7 @@ use phantom_proto::{
     phantom_llm_client::PhantomLlmClient, ActionRequest, PlanRequest, PlanResponse,
     ThinkingChunk,
 };
-use tokio_stream::StreamExt;
+use tokio_stream::Stream;
 use tonic::transport::Channel;
 
 /// Retry parameters for transient gRPC failures.
@@ -86,7 +86,7 @@ impl PhantomClient {
         let resp = retry_unary(|| {
             let mut c = client.clone();
             let r = req.clone();
-            async move { c.plan_task(r).await.map(|x| x.into_inner()).map_err(|e| e) }
+            async move { c.plan_task(r).await.map(|x| x.into_inner()) }
         })
         .await?;
         Ok(resp)
@@ -98,7 +98,7 @@ impl PhantomClient {
         let resp = retry_unary(|| {
             let mut c = client.clone();
             let r = req.clone();
-            async move { c.decide_action(r).await.map(|x| x.into_inner()).map_err(|e| e) }
+            async move { c.decide_action(r).await.map(|x| x.into_inner()) }
         })
         .await?;
         Ok(resp)
@@ -108,8 +108,8 @@ impl PhantomClient {
     pub async fn stream_thinking(
         &self,
         req: ActionRequest,
-    ) -> anyhow::Result<impl tokio_stream::Stream<Item = Result<ThinkingChunk, tonic::Status>>> {
+    ) -> anyhow::Result<impl Stream<Item = Result<ThinkingChunk, tonic::Status>>> {
         let resp = self.inner.clone().stream_thinking(req).await?;
-        Ok(resp.into_inner().map(|r| r.map_err(|e| e)))
+        Ok(resp.into_inner())
     }
 }
