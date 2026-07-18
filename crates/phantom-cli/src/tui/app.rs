@@ -1,12 +1,14 @@
 //! Application state, event loop, and top-level rendering.
 
 use crate::commands::{parse_command, Command};
-use crate::tui::views::{render_chat, render_help, render_settings, status_line, status_style};
+use crate::tui::views::{
+    render_approval, render_chat, render_help, render_settings, status_line, status_style,
+};
 use crate::tui::widgets::{render_input, summarize_params};
 use crate::tui::Term;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
-use phantom_core::{Agent, AgentEvent, Config, Mode};
+use phantom_core::{Agent, AgentEvent, ApprovalDecision, ApprovalQueue, Config, Mode, PendingApproval};
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
@@ -33,6 +35,9 @@ pub enum View {
     Chat,
     Settings,
     Help,
+    /// HITL approval queue (Phase D) — shown automatically when one or more
+    /// actions are paused below the confidence gate.
+    Approval,
 }
 
 /// The interactive application.
@@ -55,6 +60,14 @@ pub struct App {
     settings_edit: Option<String>,
     /// Cursor position within `settings_edit`.
     settings_cursor: usize,
+    /// Optional HITL approval queue (Phase D). When `Some`, the app renders
+    /// a live approval view and resolves queued actions on keypress.
+    approval: Option<ApprovalQueue>,
+    /// Index of the selected pending approval (in the queue's order).
+    approval_selected: usize,
+    /// Fresh snapshot of the queue, refreshed once per frame in the run loop
+    /// so the (sync) `draw` can render it without awaiting.
+    approval_snapshot: Vec<PendingApproval>,
 }
 
 /// Internal select! discriminator for keyboard vs. agent events.
@@ -64,7 +77,7 @@ enum Input {
 }
 
 impl App {
-    pub fn new(config: Config, agent: Option<Agent>) -> Self {
+    pub fn new(config: Config, agent: Option<Agent>, approval: Option<ApprovalQueue>) -> Self {
         let provider = config.provider.clone();
         let mode = config.mode;
         let mut app = App {
@@ -83,6 +96,9 @@ impl App {
             settings_field: 0,
             settings_edit: None,
             settings_cursor: 0,
+            approval,
+            approval_selected: 0,
+            approval_snapshot: Vec::new(),
         };
         app.push(Msg::System("Welcome to Phantom — the invisible agent.".into()));
         app.push(Msg::System("Type a task, or /help for commands.".into()));
@@ -115,6 +131,11 @@ impl App {
                 Input::Agent(Some(e)) => self.handle_agent_event(e),
                 Input::Agent(None) => {}
             }
+
+            // Auto-surface the approval queue when actions are paused below the
+            // confidence gate, and return to Chat once it drains.
+            self.approval_snapshot = self.pending_approvals().await;
+            self.sync_approval_view();
 
             if self.should_quit {
                 break;
@@ -150,6 +171,9 @@ impl App {
                 self.settings_cursor,
             ),
             View::Help => render_help(f, chunks[1]),
+            View::Approval => {
+                render_approval(f, chunks[1], &self.approval_snapshot, self.approval_selected);
+            }
         }
 
         render_input(f, chunks[2], &self.input, self.cursor, self.view);
@@ -158,6 +182,10 @@ impl App {
     async fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
         if self.view == View::Settings {
             self.handle_settings_key(key);
+            return Ok(());
+        }
+        if self.view == View::Approval {
+            self.handle_approval_key(key).await;
             return Ok(());
         }
         if key.code == KeyCode::Esc && self.view != View::Chat {
@@ -341,6 +369,77 @@ impl App {
         }
     }
 
+    /// Snapshot the pending approvals (id + action) from the shared queue.
+    async fn pending_approvals(&self) -> Vec<PendingApproval> {
+        match &self.approval {
+            Some(q) => q.pending().await,
+            None => Vec::new(),
+        }
+    }
+
+    /// Switch to the Approval view when the queue is non-empty, and back to
+    /// Chat once it drains. Reads the per-frame snapshot (set in the run
+    /// loop), so it runs synchronously from `draw`'s caller.
+    fn sync_approval_view(&mut self) {
+        if self.approval.is_none() {
+            return;
+        }
+        let pending = self.approval_snapshot.len();
+        // Clamp the selection to the current queue length.
+        if pending == 0 {
+            self.approval_selected = 0;
+            if self.view == View::Approval {
+                self.view = View::Chat;
+            }
+        } else {
+            self.approval_selected = self.approval_selected.min(pending - 1);
+            if self.view == View::Chat {
+                self.view = View::Approval;
+            }
+        }
+    }
+
+    /// Key handling for the Approval Queue view. The agent is *blocked* on the
+    /// other side of the queue awaiting our verdict, so every key here resolves
+    /// (or batch-resolves) pending requests, which unblocks it.
+    async fn handle_approval_key(&mut self, key: KeyEvent) {
+        let Some(q) = self.approval.clone() else {
+            // No queue: nothing to do (shouldn't happen in this view).
+            return;
+        };
+        let pending = self.pending_approvals().await;
+        if pending.is_empty() {
+            self.view = View::Chat;
+            return;
+        }
+        let n = pending.len();
+        match key.code {
+            KeyCode::Up if self.approval_selected > 0 => self.approval_selected -= 1,
+            KeyCode::Down if self.approval_selected + 1 < n => self.approval_selected += 1,
+            // Approve the selected request.
+            KeyCode::Enter => {
+                let id = pending[self.approval_selected].id;
+                q.resolve(id, ApprovalDecision::Approve).await;
+            }
+            // Reject the selected request.
+            KeyCode::Char('r') => {
+                let id = pending[self.approval_selected].id;
+                q.resolve(id, ApprovalDecision::Reject).await;
+            }
+            // Approve every pending request.
+            KeyCode::Char('a') => {
+                q.resolve_all(ApprovalDecision::Approve).await;
+            }
+            // Reject every pending request.
+            KeyCode::Char('x') => {
+                q.resolve_all(ApprovalDecision::Reject).await;
+            }
+            // Back to the chat transcript (queue stays paused until resolved).
+            KeyCode::Esc => self.view = View::Chat,
+            _ => {}
+        }
+    }
+
     fn push(&mut self, m: Msg) {
         self.messages.push(m);
     }
@@ -362,6 +461,7 @@ impl App {
                 .map(|p| p.display().to_string())
                 .collect::<Vec<_>>()
                 .join("; "),
+            8 => format!("{:.2}", self.config.confidence_gate),
             _ => String::new(),
         }
     }
@@ -392,17 +492,25 @@ impl App {
                     .map(PathBuf::from)
                     .collect();
             }
+            8 => match v.parse::<f32>() {
+                Ok(g) if (0.0..=1.0).contains(&g) => self.config.confidence_gate = g,
+                Ok(_) => self.push(Msg::Error(
+                    "confidence_gate must be between 0.0 and 1.0".into(),
+                )),
+                Err(_) => self.push(Msg::Error("confidence_gate must be a number".into())),
+            },
             _ => {}
         }
     }
 
-    /// Push live config changes (mode/provider) into the running agent.
+    /// Push live config changes (mode/provider/gate) into the running agent.
     fn apply_settings_to_runtime(&mut self) {
         self.mode = self.config.mode;
         self.provider = self.config.provider.clone();
         if let Some(a) = &mut self.agent {
             a.set_mode(self.config.mode);
             a.set_provider(self.config.provider.clone());
+            a.set_confidence_gate(self.config.confidence_gate);
         }
     }
 

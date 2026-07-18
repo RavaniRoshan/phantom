@@ -11,6 +11,7 @@ pub fn render_input(f: &mut ratatui::Frame, area: Rect, input: &str, cursor: usi
         View::Chat => "❯ ",
         View::Settings => "/settings ",
         View::Help => "/help ",
+        View::Approval => "/approve ",
     };
 
     let chars: Vec<char> = input.chars().collect();

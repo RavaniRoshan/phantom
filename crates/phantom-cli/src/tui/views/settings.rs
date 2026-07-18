@@ -17,6 +17,7 @@ pub const SETTINGS_FIELDS: &[(&str, &str)] = &[
     ("grpc_endpoint", "gRPC LLM service address"),
     ("max_iterations", "Max DecideAction iterations per task"),
     ("allowed_folders", "Safe-mode folders (;-separated)"),
+    ("confidence_gate", "Autonomy gate: pause actions below this confidence (0..1)"),
 ];
 pub const SETTINGS_FIELD_COUNT: usize = SETTINGS_FIELDS.len();
 
@@ -54,6 +55,7 @@ pub fn render_settings(
             .map(|p| p.display().to_string())
             .collect::<Vec<_>>()
             .join("; "),
+        format!("{:.2}", config.confidence_gate),
     ];
 
     let mut lines: Vec<Line> = Vec::new();

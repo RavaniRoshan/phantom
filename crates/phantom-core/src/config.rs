@@ -55,6 +55,11 @@ pub struct Config {
     /// Upper bound on concurrent workers the Master Planner may run at once.
     /// The effective count is further capped by available RAM (~2 GiB/worker).
     pub max_parallel_workers: u32,
+    /// Confidence threshold (0..1) for the Phase D autonomy gate. In Safe
+    /// mode an action the LLM is *less* confident than this about is paused
+    /// for human approval (if a TUI is attached) or skipped (headless). Hero
+    /// mode ignores the gate. `0.0` disables it (everything auto-runs).
+    pub confidence_gate: f32,
 }
 
 impl Default for Config {
@@ -69,6 +74,7 @@ impl Default for Config {
             grpc_endpoint: "http://127.0.0.1:50051".to_string(),
             max_iterations: 25,
             max_parallel_workers: 4,
+            confidence_gate: 0.95,
         }
     }
 }
@@ -127,6 +133,14 @@ impl Config {
         if self.max_parallel_workers == 0 {
             self.max_parallel_workers = 4;
         }
+        // Clamp the autonomy gate into [0, 1]; out-of-range means "disabled".
+        if !self.confidence_gate.is_finite() {
+            self.confidence_gate = 0.0;
+        } else if self.confidence_gate < 0.0 {
+            self.confidence_gate = 0.0;
+        } else if self.confidence_gate > 1.0 {
+            self.confidence_gate = 1.0;
+        }
         if self.allowed_folders.is_empty() {
             self.allowed_folders = default_allowed_folders();
         }
@@ -179,6 +193,27 @@ mod tests {
         let cfg = Config::load(&path).expect("load default");
         assert_eq!(cfg.provider, "claude");
         assert!(cfg.model.is_empty());
+    }
+
+    #[test]
+    fn confidence_gate_round_trips_and_clamps() {
+        let mut cfg = Config::default();
+        cfg.confidence_gate = 0.8;
+        let path = std::env::temp_dir().join("phantom-gate.toml");
+        let _ = std::fs::remove_file(&path);
+        cfg.save(&path).expect("save");
+        let loaded = Config::load(&path).expect("load");
+        assert_eq!(loaded.confidence_gate, 0.8);
+
+        // Out-of-range values are clamped into [0, 1] on load.
+        let mut bad = Config::default();
+        bad.confidence_gate = 5.0;
+        bad.normalize();
+        assert_eq!(bad.confidence_gate, 1.0);
+        bad.confidence_gate = -1.0;
+        bad.normalize();
+        assert_eq!(bad.confidence_gate, 0.0);
+        let _ = std::fs::remove_file(&path);
     }
 }
 

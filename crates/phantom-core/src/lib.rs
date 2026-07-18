@@ -3,6 +3,7 @@
 //! Higher-level orchestration (the OmniAgent action loop, routing, security
 //! enforcement) lives in sibling modules added in later phases.
 pub mod agent;
+pub mod approval;
 pub mod client;
 pub mod config;
 pub mod error;
@@ -13,6 +14,7 @@ pub mod stream;
 pub mod task;
 
 pub use agent::Agent;
+pub use approval::{ApprovalDecision, ApprovalQueue, PendingApproval};
 pub use client::PhantomClient;
 pub use config::{Config, Mode};
 pub use error::{PhantomError, Result};
