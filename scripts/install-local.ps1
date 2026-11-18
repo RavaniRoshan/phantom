@@ -18,7 +18,7 @@ function Find-Binary([string]$name) {
         $candidate = Join-Path $root "target/$profile/$name"
         if (Test-Path $candidate) { return $candidate }
     }
-    throw "$name not found — run 'cargo build -p phantom-daemon -p phantom-cli' first"
+    throw "$name not found - run 'cargo build -p phantom-daemon -p phantom-cli' first"
 }
 
 foreach ($name in @('phantom-daemon.exe', 'phantom.exe', 'phantom-guest.exe')) {
