@@ -43,8 +43,11 @@ foreach ($stub in @('phantom_pb2.py', 'phantom_pb2_grpc.py')) {
 # Third-party dependencies, installed into the staged site-packages.
 $site = Join-Path $dest 'Lib/site-packages'
 New-Item -ItemType Directory -Path $site -Force | Out-Null
+# grpcio-tools is intentionally NOT installed here: it is only needed to
+# generate the proto stubs (already copied above) and has no wheel on newer
+# Python versions. The runtime only needs grpcio.
 & $Python -m pip install --disable-pip-version-check --no-compile --quiet --target $site `
-    "grpcio>=1.60" "grpcio-tools>=1.60" "anthropic>=0.40" "openai>=1.30" `
+    "grpcio>=1.60" "anthropic>=0.40" "openai>=1.30" `
     "google-generativeai>=0.5" "ollama>=0.4" "pydantic>=2.0"
 if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
 
