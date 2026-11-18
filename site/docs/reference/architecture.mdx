@@ -1,0 +1,35 @@
+---
+title: Architecture
+description: Crates, protocols and the isolation boundary.
+sidebar:
+  label: Architecture
+  order: 1
+---
+
+## Workspace map
+
+| Crate | Role |
+|---|---|
+| `phantom-core` | Agent loop, policy, queue, store, verifier, DAG, artifacts, secrets. |
+| `phantom-control` | Authenticated local API with SSE events. |
+| `phantom-cli` | Interactive TUI (development and advanced users). |
+| `phantom-daemon` | Owns tasks, webhook, watcher, run history, audit log. |
+| `phantom-app` | Tauri 2 Windows GUI. |
+| `phantom-vm` | Typed VM backends: Mock, Hyper-V, Cloud PC, guest client. |
+| `phantom-guest` | In-VM capture, input and UIA endpoints. |
+| `phantom-browser` | Headless Chromium actions with bounded extraction. |
+| `phantom-fs` | Sandboxed file operations and PowerShell runner. |
+| `phantom-proto` | gRPC contract with the Python sidecar. |
+
+## Protocols
+
+- Rust ↔ Python: gRPC `DecideAction` / `PlanTask` / `StreamThinking`.
+- GUI ↔ daemon: HTTP + SSE on `127.0.0.1:4546`, bearer token and nonce.
+- Host ↔ guest: authenticated HTTP on the VM's internal switch.
+
+## Design constraints
+
+1. No capture from a hidden or disconnected desktop.
+2. No secret in `config.toml` or logs.
+3. No bare `done` without verification.
+4. No false green release gate.

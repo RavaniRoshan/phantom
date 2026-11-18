@@ -1,0 +1,168 @@
+---
+import PageLayout from "blume/components/layout/PageLayout.astro";
+import data from "blume:data";
+
+const { config } = data;
+const base = import.meta.env.BASE_URL;
+---
+
+<PageLayout
+  site={{ title: config.title, description: config.description }}
+  logo={config.logo}
+  banner={config.banner}
+  analytics={config.analytics}
+  navigation={data.navigation}
+  favicon={config.favicon}
+  fontCssVars={data.fontCssVars}
+  themeMode={config.theme.mode}
+  searchEnabled={config.search.enabled}
+  siteUrl={config.site}
+  ogEnabled={config.og.enabled}
+  transparentHeader={true}
+  page={{
+    title: "Phantom — background computer-use agent for Windows",
+    description: config.description,
+  }}
+>
+  <div data-gloom="true" class="overflow-hidden">
+    <!-- HERO -->
+    <section class="relative -mt-16 border-b border-border pt-28 pb-20">
+      <div class="mx-auto grid max-w-6xl items-center gap-12 px-6 lg:grid-cols-[1.05fr_.95fr]">
+        <div>
+          <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground">
+            <span class="h-2 w-2 rounded-full bg-action"></span>
+            Private beta · Windows-first · one installer
+          </div>
+          <h1 class="font-display text-5xl leading-[1.05] tracking-tight sm:text-6xl">
+            Give it a task.<br />
+            <span class="text-accent">Watch it work.</span>
+          </h1>
+          <p class="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
+            Phantom is a background computer-use agent. It works inside an isolated Windows VM,
+            so your own desktop is never touched. You see every step, approve consequential actions,
+            and keep full control.
+          </p>
+          <div class="mt-9 flex flex-wrap items-center gap-3">
+            <a class="rounded-blume bg-action px-6 py-3 font-medium text-action-foreground transition hover:opacity-90" href="/docs/introduction">
+              Read the docs
+            </a>
+            <a class="rounded-blume border border-border px-6 py-3 font-medium transition hover:bg-muted" href="https://github.com/RavaniRoshan/phantom">
+              View on GitHub
+            </a>
+          </div>
+          <dl class="mt-10 grid max-w-lg grid-cols-3 gap-4 text-sm">
+            <div><dt class="text-muted-foreground">Isolation</dt><dd class="mt-1 font-display text-xl">VM-native</dd></div>
+            <div><dt class="text-muted-foreground">Providers</dt><dd class="mt-1 font-display text-xl">5 + local</dd></div>
+            <div><dt class="text-muted-foreground">Keys</dt><dd class="mt-1 font-display text-xl">BYOK</dd></div>
+          </dl>
+        </div>
+
+        <div class="relative">
+          <div class="absolute -inset-6 rounded-full bg-accent/10 blur-3xl"></div>
+          <div class="relative overflow-hidden rounded-blume border border-border bg-muted shadow-2xl">
+            <div class="flex items-center gap-2 border-b border-border px-4 py-3 text-xs text-muted-foreground">
+              <span class="h-2.5 w-2.5 rounded-full bg-red-400/70"></span>
+              <span class="h-2.5 w-2.5 rounded-full bg-amber-400/70"></span>
+              <span class="h-2.5 w-2.5 rounded-full bg-emerald-400/70"></span>
+              <span class="ml-3">Live guest capture · windows-2022</span>
+            </div>
+            <img src={`${base}capture.png`} alt="Real screenshot captured by Phantom's in-guest agent on a Windows runner" class="block w-full" />
+            <div class="flex items-center justify-between px-4 py-3 text-xs text-muted-foreground">
+              <span>1024 × 768 · PNG · non-black verified</span>
+              <a class="text-accent hover:underline" href="/docs/benchmarks/github-actions-capture">See the proof →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROBLEM / SOLUTION -->
+    <section class="mx-auto max-w-6xl px-6 py-20">
+      <div class="grid gap-8 md:grid-cols-2">
+        <div class="rounded-blume border border-border bg-muted/40 p-8">
+          <p class="text-xs uppercase tracking-widest text-muted-foreground">The problem</p>
+          <h2 class="mt-3 font-display text-2xl">Desktop agents break the user's machine</h2>
+          <p class="mt-4 text-muted-foreground">
+            Hidden desktops steal focus or return black frames. Scripts run on the host and touch
+            your files. Failures look like success. Phantom was born from proving exactly those
+            failure modes — and designing them out.
+          </p>
+        </div>
+        <div class="rounded-blume border border-accent/40 bg-accent/5 p-8">
+          <p class="text-xs uppercase tracking-widest text-accent">The Phantom way</p>
+          <h2 class="mt-3 font-display text-2xl">Isolate, observe, verify</h2>
+          <p class="mt-4 text-muted-foreground">
+            Every task runs in a separate Windows VM with a guest agent in the interactive session.
+            The host app only sees a control plane: tasks, screenshots, approvals, artifacts. Success
+            is checked against criteria, never taken from the model's word.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section class="border-y border-border bg-muted/20">
+      <div class="mx-auto max-w-6xl px-6 py-20">
+        <h2 class="font-display text-3xl">Built for control, not just autonomy</h2>
+        <p class="mt-3 max-w-2xl text-muted-foreground">
+          A Windows app that feels like a normal product — with the safety boundary a computer-use
+          agent actually needs.
+        </p>
+        <div class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {[
+            ["Native Windows app", "Tauri 2 tray + main window. Submit, watch, approve, cancel, retry, take over."],
+            ["Bring your own model", "OpenAI, Anthropic, Gemini, OpenRouter, local OpenAI-compatible — validated on save."],
+            ["Secrets where they belong", "Keys in Windows Credential Manager; never in config.toml, logs, or support bundles."],
+            ["Fail-closed by design", "Strict action schema, typed outcomes, all-black capture rejection, audit hash chain."],
+            ["Real isolation", "Hyper-V or Cloud PC behind one typed VM backend; the user's foreground is untouched."],
+            ["Evidence for every step", "Step timeline, screenshots, artifacts, tamper-evident audit, verifier pass."],
+          ].map(([title, body]) => (
+            <article class="rounded-blume border border-border bg-background p-6 transition hover:border-accent/60">
+              <div class="mb-4 h-1 w-10 rounded-full bg-accent"></div>
+              <h3 class="font-display text-lg">{title}</h3>
+              <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- ARCHITECTURE -->
+    <section class="mx-auto max-w-6xl px-6 py-20">
+      <h2 class="font-display text-3xl">How it fits together</h2>
+      <div class="mt-8 grid gap-4 md:grid-cols-4">
+        {[
+          ["01", "Windows app", "Tauri GUI + tray. Thin client only."],
+          ["02", "Control plane", "Authenticated local API owns tasks and events."],
+          ["03", "Isolated VM", "Guest agent captures and injects inside the VM."],
+          ["04", "Your provider", "BYOK keys resolved per request from the OS store."],
+        ].map(([n, title, body]) => (
+          <div class="relative rounded-blume border border-border p-6">
+            <span class="font-mono text-xs text-accent">{n}</span>
+            <h3 class="mt-3 font-display text-lg">{title}</h3>
+            <p class="mt-2 text-sm text-muted-foreground">{body}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="border-t border-border bg-gradient-to-b from-accent/10 to-transparent">
+      <div class="mx-auto max-w-4xl px-6 py-24 text-center">
+        <h2 class="font-display text-3xl sm:text-4xl">Ready to try the beta?</h2>
+        <p class="mx-auto mt-4 max-w-xl text-muted-foreground">
+          Read the setup guide, check the release gates, then install the signed Windows app and give
+          Phantom its first task.
+        </p>
+        <div class="mt-8 flex flex-wrap justify-center gap-3">
+          <a class="rounded-blume bg-accent px-6 py-3 font-medium text-accent-foreground" href="/docs/getting-started/installation">
+            Get started
+          </a>
+          <a class="rounded-blume border border-border px-6 py-3 font-medium" href="/docs/benchmarks/release-gates">
+            Check release gates
+          </a>
+        </div>
+      </div>
+    </section>
+  </div>
+</PageLayout>

@@ -1,0 +1,34 @@
+/* "Gloom" — Phantom's dark-first Blume theme. */
+:root {
+  --blume-background: #090b12;
+  --blume-foreground: #eef1f8;
+  --blume-muted: #141925;
+  --blume-muted-foreground: #97a2bb;
+  --blume-border: #262d3e;
+  --blume-accent: #7c5cff;
+  --blume-accent-foreground: #ffffff;
+  --blume-action: #38e8c8;
+  --blume-action-foreground: #04241f;
+  --blume-radius: 0.9rem;
+  --blume-code-background: #0e1320;
+}
+
+:root[data-theme="light"] {
+  --blume-background: #f7f8fc;
+  --blume-foreground: #121522;
+  --blume-muted: #eef0f7;
+  --blume-muted-foreground: #5b6478;
+  --blume-border: #dde1ec;
+  --blume-accent: #6244e0;
+  --blume-accent-foreground: #ffffff;
+  --blume-action: #0f9e87;
+  --blume-action-foreground: #ffffff;
+  --blume-code-background: #eef0f7;
+}
+
+[data-gloom="true"] {
+  background-image:
+    radial-gradient(circle at 15% -10%, rgba(124, 92, 255, 0.22), transparent 45%),
+    radial-gradient(circle at 95% 5%, rgba(56, 232, 200, 0.12), transparent 40%);
+  background-attachment: fixed;
+}

@@ -21,7 +21,7 @@ $tests = @(
     'test_cancellation_isolation', 'test_golden_harness',
     'test_packaging', 'test_wiring', 'test_control_plane',
     'test_gui_shell', 'test_provider_config', 'test_vm_backend',
-    'test_beta_release', 'test_gh_evidence', 'test_release_gate_evidence'
+    'test_beta_release', 'test_gh_evidence', 'test_release_gate_evidence', 'test_site'
 )
 python -m unittest ($tests | ForEach-Object { "python.tests.$_" })
 if ($LASTEXITCODE -ne 0) { throw "Python tests failed" }

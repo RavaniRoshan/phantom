@@ -1,0 +1,41 @@
+---
+title: Installation
+description: Install the signed Windows app and connect the daemon control plane.
+sidebar:
+  label: Installation
+  order: 1
+---
+
+Phantom ships as a single per-user Windows installer. No terminal is required after install.
+
+## Requirements
+
+- Windows 10/11 (Pro/Enterprise recommended for local Hyper-V).
+- Node/WebView2 runtime: the installer embeds the WebView2 bootstrapper (~1.8 MB).
+- A provider API key for live tasks (see [Providers](/docs/guides/providers)).
+
+## Install
+
+1. Download `Phantom_x64-setup.exe` from the latest GitHub Release.
+2. Run it — the default install is per-user in `%LOCALAPPDATA%`, no admin rights.
+3. Open Phantom from the Start menu. The tray icon appears.
+
+:::warning
+The beta installer may still show a SmartScreen "unrecognized app" warning while
+reputation accumulates, even when correctly signed. Verify the publisher before continuing.
+:::
+
+## What starts automatically
+
+- The **daemon** owns tasks, runs the control plane on `127.0.0.1:4546`, writes run
+  history to SQLite and appends to the audit hash chain.
+- The **GUI** is a thin client. Closing the window does not stop running tasks.
+
+## Verify the install
+
+```powershell
+phantom-daemon --help
+curl -H "Authorization: Bearer $env:PHANTOM_CONTROL_TOKEN" http://127.0.0.1:4546/vm/status
+```
+
+If the daemon is not running, start it from the tray or run `phantom-daemon`.

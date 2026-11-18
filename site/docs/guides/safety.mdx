@@ -1,0 +1,39 @@
+---
+title: Safety model
+description: Capability scopes, approvals, secret handling and isolation boundaries.
+sidebar:
+  label: Safety model
+  order: 3
+---
+
+## Capability scope, not a denylist
+
+Every task runs with an explicit scope: allowed folders, apps, domains, shell executables
+and network access. Anything not granted is denied. A 50-case red-team suite covers shell
+chaining, path escapes, desktop `open` injection and prompt-injection phrases.
+
+## Sandbox and approvals are separate
+
+- The **sandbox** defines what the agent can reach.
+- **Approvals** define when it pauses for a human.
+
+Choosing "auto-approve safe actions" never widens the sandbox. Consequential actions —
+sending, submitting, paying — always require confirmation or takeover.
+
+## Isolation
+
+Desktop automation runs inside a separate Windows VM. The user's focus, clipboard and
+pointer are not driven. The guest agent runs in the VM's interactive session, never in
+Session 0.
+
+## Secrets and audit
+
+- Keys live in Windows Credential Manager; shells have sensitive env vars removed.
+- The webhook requires bearer token + nonce; the control plane requires bearer + nonce.
+- Every action is recorded in an append-only SHA-256 hash chain; tampering is detectable.
+- Support bundles redact keys, tokens and provider prefixes.
+
+## Untrusted data
+
+Web pages, files and shell output are framed as data, never instructions. Control
+phrases are stripped and the model is told explicitly that the content is untrusted.
