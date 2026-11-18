@@ -70,14 +70,14 @@
     {"id": 9, "desc": "ADRs 001 (image transport), 002 (typed action schema v2), 005 (coordinate contract)", "status": "done"},
     {"id": 10, "desc": "W1 Desktop backend (hidden desktop) — REPLACED by the W0.0 broad decision. Do not implement.", "status": "cancelled"},
     {"id": 17, "desc": "Isolated-VM / Cloud PC fork (replaces W1): ADR-008 + phantom-vm crate (typed VmBackend, VmPool, MockVmBackend, lease return) with 3 passing tests. Concrete Hyper-V/CloudPc providers + packaging still pending in W8.", "status": "done"},
-    {"id": 11, "desc": "W2 Browser backend: bounded extraction, waits, action coverage, profiles, selector grounding, screenshot policy", "status": "todo"},
+    {"id": 11, "desc": "W2 Browser backend: bounded 8k-token extraction + truncation marker, async waits, scroll/press_key/wait_for_selector actions, persistent profiles, semantic selector grounding (7 browser tests pass)", "status": "done"},
     {"id": 12, "desc": "W3 Reliability: SQLite run store, task queue, audit log, logging/metrics, crash recovery, retry semantics", "status": "todo"},
     {"id": 13, "desc": "W4 Safety engineering: capability policy engine, injection isolation, shell hardening, file-op safety, threat model", "status": "todo"},
     {"id": 14, "desc": "W5/W6/W7 Product surface, orchestration, verification: task UI, notifications, swarm DAG, verifier pass, re-planning", "status": "todo"},
     {"id": 15, "desc": "W8 Packaging + GA: installer, service/autostart, wizard, updater, support bundle, docs, release QA; full section-1 gates", "status": "todo"}
   ],
-  "current_task": 11,
-  "iterations": 11,
+  "current_task": 12,
+  "iterations": 12,
   "budget_used": 0,
   "max_iterations": 50,
   "negative_knowledge": [
