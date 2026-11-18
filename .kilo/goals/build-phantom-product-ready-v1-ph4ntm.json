@@ -78,7 +78,7 @@
     {"id": 18, "desc": "External validation: provision isolated VM host, build+sign MSI, run live desktop/browser golden suites + 8h soak, external security review, beta users. BLOCKED by infrastructure (no VM host/cert/users in this environment). See docs/benchmarks/release-gates.md.", "status": "blocked"}
   ],
   "current_task": 18,
-  "iterations": 17,
+  "iterations": 18,
   "budget_used": 0,
   "max_iterations": 50,
   "negative_knowledge": [

@@ -30,7 +30,7 @@ users).
 | Gate | Target | Status | Evidence |
 |---|---|---|---|
 | 8-hour soak, 200 tasks | no leaks | ❌ BLOCKED | Needs VM host + long-running session. |
-| Crash recovery | resume queued work | ⚠️ PARTIAL | `RunStore` + `TaskQueue` exist; daemon wiring pending. |
+| Crash recovery | resume queued work | ⚠️ PARTIAL | `RunStore` + `TaskQueue` are now wired into the daemon (runs/steps/audit recorded, dedupe/retry); full kill-and-resume soak still needs a VM host. |
 | Cancellation < 2 s | honoured | ✅ VERIFIED | `CancellationToken` through agent + shell (unit tests). |
 | p95 latency / cost capped | measured | ❌ NOT IMPLEMENTED | Instrumentation not wired to a dashboard. |
 
@@ -53,4 +53,6 @@ remaining work is provisioning/validation, not missing code for the
 already-gated items.
 
 `docs/benchmarks/baseline.md` and `latest.json` hold the measured scores that
-do exist.
+do exist. Run `scripts/verify-all.ps1` (or the CI workflow) to reproduce every
+check that can be run in this workspace: `cargo check`, 81 Rust tests, the
+20-task deterministic harness, and 39 Python tests — all green.

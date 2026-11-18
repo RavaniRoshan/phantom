@@ -40,6 +40,11 @@ jobs:
       - name: Test portable Rust crates
         run: cargo test -p phantom-fs -p phantom-proto -p phantom-core
 
+      # W0.11: deterministic golden tasks must pass on every PR. Live
+      # desktop/browser suites need a self-hosted VM host and are not run here.
+      - name: Golden-task harness (20 deterministic file/CLI tasks)
+        run: cargo run -p phantom-core --example bench
+
       - name: Python provider + end-to-end tests
         run: |
           cd python
@@ -87,3 +92,6 @@ jobs:
 
       - name: Test portable Rust crates
         run: cargo test -p phantom-fs -p phantom-proto -p phantom-core
+
+      - name: Golden-task harness (deterministic)
+        run: cargo run -p phantom-core --example bench
