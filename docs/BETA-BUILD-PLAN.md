@@ -252,3 +252,15 @@ A Docker Windows VM (QEMU/KVM on Docker Desktop/WSL2) needs ~4–8 GB RAM for th
 3. Once the Azure VM exists, run B0.3 on it. If capture fails there too, we re-scope again before any GUI feature work.
 
 **Honest note:** no free service removes the need for a real Windows interactive session — it just moves it off your 4–5 GB machine. Azure's 12-month free Windows VM is the best available way to get one.
+
+## A.8 No-card options (verified 2026-11-18) — user chose AWS Free Tier
+
+A follow-up verification stream checked strict no-credit-card signup. Ranked results:
+
+1. **GitHub Actions `windows-2022` (public repo) — genuinely no card.** Free for public repos; 6 h/job; a workflow can launch a GUI app, capture the desktop screenshot and upload it as an artifact **with zero inbound RDP**. Best *first* no-card proof of B0.3 (non-black frame), though the interactive-session internals (WinSta0/session 1) are not officially documented — verify in-workflow with `query session` + pixel inspection. **Never use reverse-RDP/tmate into hosted runners** — third-party tmate debugging has caused real GitHub account suspensions. https://docs.github.com/billing/concepts/product-billing/github-actions · https://github.com/marketplace/actions/create-a-desktop-screenshot
+2. **AppVeyor free OSS / 14-day trial — no card**, genuine live RDP with admin into the build worker, but **60-minute hard job cap** and RDP availability on the free OSS tier is unverified. https://www.appveyor.com/pricing/ · https://www.appveyor.com/docs/how-to/rdp-to-build-worker/
+3. **AWS Free Tier (selected by user).** Payment method is **not required for most new customers**, but AWS "may request additional information, such as a payment method, to verify your identity" — card may be forced. Credentials: $100 at signup + up to $100 through activities, valid 6 months. **Windows Server license is bundled into the hourly EC2 price** (plus 2 RDS admin licenses, no CALs), so Windows runtime burns credits; no separate free Windows EC2 entitlement. https://aws.amazon.com/free/free-tier-faqs/ · https://aws.amazon.com/windows/resources/licensing/
+4. **Azure for Students — no card**, $100 / 12 months, full subscription supports Windows VM + RDP, but requires 18+ full-time student status verified by school email. https://azure.microsoft.com/en-us/pricing/offers/ms-azr-0170p
+5. **Card required (excluded):** standard Azure free account, Google Cloud trial, Oracle Cloud Free Tier, Kamatera, Alibaba Cloud.
+
+**Decision:** proceed with **AWS Free Tier** (user's choice). Fallbacks in order if identity verification forces a card or credits run out: GitHub Actions `windows-2022` (no card, in-workflow proof), AppVeyor (live RDP, 60 min), Azure for Students (if eligible). Signup page opened for the user at `https://signin.aws.amazon.com/signup?request_type=register`; credentials are handled by the user only.
