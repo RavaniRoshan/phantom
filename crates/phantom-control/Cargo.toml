@@ -1,0 +1,18 @@
+[package]
+name = "phantom-control"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+phantom-core = { path = "../phantom-core" }
+axum = "0.7"
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+futures.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+tower = { version = "0.4", features = ["util"] }

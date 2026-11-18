@@ -4,16 +4,26 @@
 //! enforcement) lives in sibling modules added in later phases.
 pub mod agent;
 pub mod approval;
+pub mod artifacts;
+pub mod bench;
+pub mod dag;
 pub mod client;
 pub mod config;
 pub mod error;
 pub mod orchestrator;
 pub mod router;
+pub mod secrets;
 pub mod security;
+pub mod injection;
+pub mod notify;
+pub mod policy;
+pub mod queue;
+pub mod store;
+pub mod verify;
 pub mod stream;
 pub mod task;
 
-pub use agent::Agent;
+pub use agent::{Agent, RunOutcome};
 pub use approval::{ApprovalDecision, ApprovalQueue, PendingApproval};
 pub use client::PhantomClient;
 pub use config::{Config, Mode};

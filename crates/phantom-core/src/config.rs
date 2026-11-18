@@ -65,6 +65,15 @@ pub struct Config {
     /// Paired with the service-side fallback (a provider that omits confidence
     /// reports ~0.85), so the gate never blocks the whole loop by default.
     pub confidence_gate: f32,
+    /// Wall-clock timeout for a single decision RPC or shell command (W0.10).
+    pub step_timeout_secs: u64,
+    /// Maximum bytes of command output returned to the model (W0.10).
+    pub max_output_bytes: usize,
+    /// Bounded re-plan attempts after a failed verification (W7.3).
+    pub max_replans: u32,
+    /// Credential-store target for the active provider's key (B3).
+    /// The secret itself is never stored in config.toml.
+    pub key_ref: String,
 }
 
 impl Default for Config {
@@ -80,6 +89,10 @@ impl Default for Config {
             max_iterations: 25,
             max_parallel_workers: 4,
             confidence_gate: 0.70,
+            step_timeout_secs: 30,
+            max_output_bytes: 64 * 1024,
+            max_replans: 2,
+            key_ref: String::new(),
         }
     }
 }
@@ -104,7 +117,31 @@ impl Config {
         let mut cfg: Config = toml::from_str(&text)
             .map_err(|e| crate::PhantomError::Config(e.to_string()))?;
         cfg.normalize();
+        cfg.migrate_secrets(path);
         Ok(cfg)
+    }
+
+    /// Move a legacy plaintext `api_key` out of config.toml into the OS secret
+    /// store, then persist the cleaned config. Best-effort: on failure the file
+    /// value is retained so the user's key is never lost. No-op off-Windows.
+    fn migrate_secrets(&mut self, path: &Path) {
+        if self.api_key.is_empty() {
+            return;
+        }
+        #[cfg(windows)]
+        {
+            match crate::secrets::set_secret(crate::secrets::API_KEY_TARGET, &self.api_key) {
+                Ok(()) => {
+                    self.api_key.clear();
+                    if let Err(e) = self.save(path) {
+                        eprintln!("warning: could not persist cleaned config: {e}");
+                    }
+                }
+                Err(e) => eprintln!("warning: could not migrate API key to Credential Manager: {e}"),
+            }
+        }
+        #[cfg(not(windows))]
+        let _ = path;
     }
 
     /// Persist the config to `path`, creating parent directories.
@@ -119,9 +156,16 @@ impl Config {
         Ok(())
     }
 
-    /// Resolve the API key: prefer the env var, then the file value.
+    /// Resolve the API key: env var first (CI/tunnel override), then the OS
+    /// credential store, then the legacy file value (only before migration).
     pub fn resolved_api_key(&self) -> String {
-        std::env::var("PHANTOM_API_KEY").unwrap_or_else(|_| self.api_key.clone())
+        if let Ok(key) = std::env::var("PHANTOM_API_KEY") {
+            return key;
+        }
+        if let Ok(Some(key)) = crate::secrets::get_secret(crate::secrets::API_KEY_TARGET) {
+            return key;
+        }
+        self.api_key.clone()
     }
 
     /// Fill empty fields with defaults so a partially-written TOML is usable.
@@ -138,6 +182,13 @@ impl Config {
         if self.max_parallel_workers == 0 {
             self.max_parallel_workers = 4;
         }
+        if self.step_timeout_secs == 0 {
+            self.step_timeout_secs = 30;
+        }
+        if self.max_output_bytes == 0 {
+            self.max_output_bytes = 64 * 1024;
+        }
+        // Zero is a valid "no re-plan" policy, so no normalization here.
         // Clamp the autonomy gate into [0, 1]; out-of-range means "disabled".
         if !self.confidence_gate.is_finite() {
             self.confidence_gate = 0.0;

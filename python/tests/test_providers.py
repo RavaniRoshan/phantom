@@ -33,14 +33,22 @@ def test_normalize_action_dict_coerces_types():
     assert isinstance(d["confidence"], float)
 
 
-def test_normalize_action_dict_defaults():
-    d = normalize_action_dict({})
+def test_normalize_action_dict_fails_closed():
+    # W0.2: an empty/malformed output must NEVER silently become `done`.
+    # The old lenient default produced a false success; strict is now the
+    # default and the gRPC server maps this to INVALID_ARGUMENT.
+    from phantom_llm.schema import ActionValidationError
+
+    try:
+        normalize_action_dict({})
+    except ActionValidationError:
+        pass
+    else:
+        raise AssertionError("empty action dict must be rejected in strict mode")
+    # Legacy lenient mode remains available for offline tooling only.
+    d = normalize_action_dict({}, strict=False)
     assert d["action_type"] == "done"
     assert d["action"] == "done"
-    assert d["params"] == {}
-    # An empty dict normalizes to a `done` action, which is always fully
-    # confident (nothing left to risk). A real non-done action with no
-    # confidence falls back to DEFAULT_CONFIDENCE (0.85) on the server.
     assert d["confidence"] == 1.0
 
 

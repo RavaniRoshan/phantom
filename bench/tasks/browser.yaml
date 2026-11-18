@@ -1,0 +1,220 @@
+- id: browser-01
+  backend: browser
+  prompt: 'Open https://example.com and save a short summary of the page to {workdir}/browser/task-01.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-01.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-01.md']
+- id: browser-02
+  backend: browser
+  prompt: 'Open https://example.org and save a short summary of the page to {workdir}/browser/task-02.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-02.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-02.md']
+- id: browser-03
+  backend: browser
+  prompt: 'Open https://example.net and save a short summary of the page to {workdir}/browser/task-03.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-03.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-03.md']
+- id: browser-04
+  backend: browser
+  prompt: 'Open https://www.wikipedia.org and save a short summary of the page to {workdir}/browser/task-04.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-04.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-04.md']
+- id: browser-05
+  backend: browser
+  prompt: 'Open https://www.python.org and save a short summary of the page to {workdir}/browser/task-05.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-05.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-05.md']
+- id: browser-06
+  backend: browser
+  prompt: 'Open https://example.com and save a short summary of the page to {workdir}/browser/task-06.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-06.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-06.md']
+- id: browser-07
+  backend: browser
+  prompt: 'Open https://example.org and save a short summary of the page to {workdir}/browser/task-07.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-07.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-07.md']
+- id: browser-08
+  backend: browser
+  prompt: 'Open https://example.net and save a short summary of the page to {workdir}/browser/task-08.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-08.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-08.md']
+- id: browser-09
+  backend: browser
+  prompt: 'Open https://www.wikipedia.org and save a short summary of the page to {workdir}/browser/task-09.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-09.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-09.md']
+- id: browser-10
+  backend: browser
+  prompt: 'Open https://www.python.org and save a short summary of the page to {workdir}/browser/task-10.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-10.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-10.md']
+- id: browser-11
+  backend: browser
+  prompt: 'Open https://example.com and save a short summary of the page to {workdir}/browser/task-11.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-11.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-11.md']
+- id: browser-12
+  backend: browser
+  prompt: 'Open https://example.org and save a short summary of the page to {workdir}/browser/task-12.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-12.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-12.md']
+- id: browser-13
+  backend: browser
+  prompt: 'Open https://example.net and save a short summary of the page to {workdir}/browser/task-13.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-13.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-13.md']
+- id: browser-14
+  backend: browser
+  prompt: 'Open https://www.wikipedia.org and save a short summary of the page to {workdir}/browser/task-14.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-14.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-14.md']
+- id: browser-15
+  backend: browser
+  prompt: 'Open https://www.python.org and save a short summary of the page to {workdir}/browser/task-15.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-15.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-15.md']
+- id: browser-16
+  backend: browser
+  prompt: 'Open https://example.com and save a short summary of the page to {workdir}/browser/task-16.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-16.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-16.md']
+- id: browser-17
+  backend: browser
+  prompt: 'Open https://example.org and save a short summary of the page to {workdir}/browser/task-17.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-17.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-17.md']
+- id: browser-18
+  backend: browser
+  prompt: 'Open https://example.net and save a short summary of the page to {workdir}/browser/task-18.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-18.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-18.md']
+- id: browser-19
+  backend: browser
+  prompt: 'Open https://www.wikipedia.org and save a short summary of the page to {workdir}/browser/task-19.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-19.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-19.md']
+- id: browser-20
+  backend: browser
+  prompt: 'Open https://www.python.org and save a short summary of the page to {workdir}/browser/task-20.md'
+  setup:
+    - type: mkdir
+      path: '{workdir}/browser'
+  check:
+    type: file_contains
+    path: '{workdir}/browser/task-20.md'
+    text: 'summary'
+  artifacts: ['{workdir}/browser/task-20.md']

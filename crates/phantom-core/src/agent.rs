@@ -7,12 +7,13 @@ use crate::security::Security;
 use crate::stream::AgentEvent;
 use phantom_browser::BrowserBackend;
 use phantom_fs;
-use phantom_proto::{ActionHistory, ActionRequest, ActionResponse};
+use phantom_proto::{ActionHistory, ActionRequest, ActionResponse, ThinkingChunk};
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
-use tokio_stream::StreamExt;
+use tokio_util::sync::CancellationToken;
 
 /// Outcome of executing one action against a backend.
 struct StepOutcome {
@@ -20,6 +21,23 @@ struct StepOutcome {
     context: String,
     success: bool,
     result: String,
+}
+
+/// Typed terminal outcome of an agent run (W0.13).
+///
+/// `run` still returns `Err` for decide failures and budget exhaustion so the
+/// daemon cannot mistake a failure for success; this enum gives callers that
+/// *do* want to branch on the outcome a structured value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunOutcome {
+    /// The model explicitly emitted `done`.
+    Completed { summary: String, steps: u32 },
+    /// The task stalled (e.g. max iterations / repeated actions — W0.6).
+    Stalled { reason: String, steps: u32 },
+    /// A decide/RPC/execution failure propagated out of the loop.
+    Failed { reason: String, steps: u32 },
+    /// The caller cancelled the run (W0.10).
+    Cancelled { steps: u32 },
 }
 
 /// The orchestrator. Owns the LLM client, the security policy, and lazily
@@ -41,6 +59,12 @@ pub struct Agent {
     /// of executing. `None` (daemon, swarm workers) means no human is in
     /// the loop, so uncertain actions are skipped rather than hung.
     approval: Option<ApprovalQueue>,
+    /// W0.10: cooperative cancellation shared with backends (shell commands).
+    cancel: CancellationToken,
+    /// W7.1/7.2: explicit, checkable criteria verified before `done`.
+    verification: Vec<crate::verify::Criterion>,
+    /// Root against which relative artifact criteria are resolved.
+    verification_root: std::path::PathBuf,
 }
 
 impl Agent {
@@ -55,7 +79,29 @@ impl Agent {
             desktop: Arc::new(Mutex::new(None)),
             desktop_name: "PhantomDesktop".to_string(),
             approval: None,
+            cancel: CancellationToken::new(),
+            verification: Vec::new(),
+            verification_root: std::env::temp_dir().join("phantom-work"),
         }
+    }
+
+    /// Attach explicit success criteria (W7.1). `done` is only emitted when
+    /// every criterion passes; otherwise the loop re-plans within budget.
+    pub fn set_verification(&mut self, criteria: Vec<crate::verify::Criterion>) {
+        self.verification = criteria;
+    }
+
+    pub fn set_verification_root(&mut self, root: impl Into<std::path::PathBuf>) {
+        self.verification_root = root.into();
+    }
+
+    /// Cancel the running task. Honoured at the next await point (< 2 s).
+    pub fn cancel(&self) {
+        self.cancel.cancel();
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancel.is_cancelled()
     }
 
     /// Set the hidden-desktop name this agent will create/drive. Used by the
@@ -86,7 +132,7 @@ impl Agent {
     }
 
     /// Run a task to completion, streaming [`AgentEvent`]s to `tx`.
-    pub async fn run(&self, task: &str, tx: Sender<AgentEvent>) -> anyhow::Result<()> {
+    pub async fn run(&self, task: &str, tx: Sender<AgentEvent>) -> anyhow::Result<RunOutcome> {
         // 1. Plan.
         let plan = self
             .client
@@ -101,28 +147,30 @@ impl Agent {
     /// Run the observe→decide→execute loop for a single (sub)task WITHOUT
     /// planning or emitting a Plan event. Used by the Master Planner to run one
     /// sub-task per worker — planning happens once, up front, in the planner.
-    pub async fn run_subtask(&self, task: &str, tx: Sender<AgentEvent>) -> anyhow::Result<()> {
+    pub async fn run_subtask(&self, task: &str, tx: Sender<AgentEvent>) -> anyhow::Result<RunOutcome> {
         self.execute_loop(task, tx).await
     }
 
     /// The core observe→decide→execute loop shared by [`Agent::run`] and
     /// [`Agent::run_subtask`].
-    async fn execute_loop(&self, task: &str, tx: Sender<AgentEvent>) -> anyhow::Result<()> {
+    async fn execute_loop(&self, task: &str, tx: Sender<AgentEvent>) -> anyhow::Result<RunOutcome> {
         let mut history: Vec<(String, String, bool)> = Vec::new();
         let mut backend = String::new();
         let mut last_screenshot: Option<Vec<u8>> = None;
         let mut last_context = String::new();
         let mut iterations = 0u32;
+        let mut replans = 0u32;
 
         loop {
+            if self.cancel.is_cancelled() {
+                tx.send(AgentEvent::Error("task cancelled".to_string())).await.ok();
+                return Ok(RunOutcome::Cancelled { steps: iterations });
+            }
             if iterations >= self.config.max_iterations {
-                tx.send(AgentEvent::Error(format!(
-                    "reached max iterations ({})",
-                    self.config.max_iterations
-                )))
-                .await
-                .ok();
-                break;
+                let reason = format!("reached max iterations ({})", self.config.max_iterations);
+                tx.send(AgentEvent::Error(reason.clone())).await.ok();
+                // W0.13: budget exhaustion is a failure, never a quiet success.
+                return Err(anyhow::anyhow!(reason));
             }
             iterations += 1;
 
@@ -140,25 +188,59 @@ impl Agent {
                     .collect(),
                 mode: self.config.mode.to_string(),
                 backend: backend.clone(),
+                // W0.1: declare the screenshot MIME so no provider hard-codes it.
+                screenshot_mime: phantom_desktop::detect_image_mime(
+                    last_screenshot.as_deref().unwrap_or_default(),
+                )
+                .to_string(),
+                // B3: per-request provider/model/key reference.
+                provider: self.config.provider.clone(),
+                model: self.config.model.clone(),
+                key_ref: self.config.key_ref.clone(),
             };
 
-            // Stream thinking chunks while deciding.
-            if let Ok(mut stream) = self.client.stream_thinking(req.clone()).await {
-                while let Some(chunk) = stream.next().await {
-                    if let Ok(c) = chunk {
-                        tx.send(AgentEvent::Thinking(c)).await.ok();
+            // W0.3: exactly ONE inference per step. The old pre-call to
+            // StreamThinking invoked provider.decide() a second time through the
+            // base streaming fallback, doubling cost and latency per step. We
+            // now stream a local Thinking chunk derived from the single decision
+            // so the shown reasoning always matches the executed action.
+            // W0.10: the decision RPC is bounded by a timeout and cancellable;
+            // a timeout is a retryable failure, cancellation is a clean outcome.
+            let action: ActionResponse = tokio::select! {
+                _ = self.cancel.cancelled() => {
+                    tx.send(AgentEvent::Error("task cancelled".to_string())).await.ok();
+                    return Ok(RunOutcome::Cancelled { steps: iterations });
+                }
+                res = tokio::time::timeout(
+                    Duration::from_secs(self.config.step_timeout_secs),
+                    self.client.decide_action(req),
+                ) => match res {
+                    Ok(Ok(a)) => a,
+                    Ok(Err(e)) => {
+                        tx.send(AgentEvent::Error(format!("decide failed: {e}"))).await.ok();
+                        return Err(anyhow::anyhow!("decide failed: {e}"));
                     }
-                }
-            }
-
-            // Decide the next action.
-            let action: ActionResponse = match self.client.decide_action(req).await {
-                Ok(a) => a,
-                Err(e) => {
-                    tx.send(AgentEvent::Error(format!("decide failed: {e}"))).await.ok();
-                    break;
-                }
+                    Err(_) => {
+                        let msg = format!(
+                            "decide timed out after {}s (retryable)",
+                            self.config.step_timeout_secs
+                        );
+                        tx.send(AgentEvent::Error(msg.clone())).await.ok();
+                        return Err(anyhow::anyhow!(msg));
+                    }
+                },
             };
+            let thinking = if action.reasoning.is_empty() {
+                format!("Next: [{}] {}", action.action_type, action.action)
+            } else {
+                action.reasoning.clone()
+            };
+            tx.send(AgentEvent::Thinking(ThinkingChunk {
+                text: thinking,
+                phase: "executing".to_string(),
+            }))
+            .await
+            .ok();
             tx.send(AgentEvent::Action(action.clone())).await.ok();
 
             // Confidence gate (Phase D). In Safe mode, an action the model is
@@ -208,8 +290,34 @@ impl Agent {
             }
 
             if action.action_type == "done" {
+                // W7.2: never trust a bare `done` when criteria were supplied.
+                if !self.verification.is_empty() {
+                    let results = crate::verify::verify(&self.verification, &self.verification_root);
+                    if !crate::verify::all_passed(&results) {
+                        let detail = crate::verify::failure_detail(&results);
+                        tx.send(AgentEvent::Error(format!("verification failed: {detail}")))
+                            .await
+                            .ok();
+                        history.push((
+                            "verify/failed".to_string(),
+                            detail.clone(),
+                            false,
+                        ));
+                        if crate::verify::can_replan(replans, self.config.max_replans) {
+                            replans += 1;
+                            last_context = format!("verification failed: {detail} — re-plan");
+                            continue;
+                        }
+                        return Err(anyhow::anyhow!(
+                            "verification failed after {replans} re-plan(s): {detail}"
+                        ));
+                    }
+                }
                 tx.send(AgentEvent::Result(action.reasoning.clone())).await.ok();
-                break;
+                return Ok(RunOutcome::Completed {
+                    summary: action.reasoning.clone(),
+                    steps: iterations,
+                });
             }
 
             // Execute against the appropriate backend.
@@ -230,7 +338,10 @@ impl Agent {
             backend = action.action_type.clone();
         }
 
-        Ok(())
+        // All loop exits above return a typed outcome or an error; the `loop`
+        // never breaks, so no trailing expression is required. A future
+        // refactor that introduces `break` must return an outcome explicitly —
+        // reintroducing a trailing `Ok(())` would recreate the false-success bug.
     }
 
     /// Whether `action` must be held for human approval before executing.
@@ -390,9 +501,9 @@ impl Agent {
                 }
             }
             "screenshot" => match desktop.screenshot().await {
-                Ok(bytes) => {
+                Ok(image) => {
                     return StepOutcome {
-                        screenshot: Some(bytes),
+                        screenshot: Some(image.bytes),
                         context: String::new(),
                         success: true,
                         result: "ok".to_string(),
@@ -407,7 +518,7 @@ impl Agent {
             Ok(()) => {
                 // Capture so the observe-loop always has fresh visual state,
                 // matching the browser backend's per-action screenshot.
-                let screenshot = desktop.screenshot().await.ok();
+                let screenshot = desktop.screenshot().await.ok().map(|image| image.bytes);
                 StepOutcome {
                     screenshot,
                     context: String::new(),
@@ -493,7 +604,13 @@ impl Agent {
             .or_else(|| action.params.get("cmd"))
             .map(String::as_str)
             .unwrap_or("");
-        match phantom_fs::powershell::run_command(cmd).await {
+        match phantom_fs::powershell::run_command(
+            cmd,
+            Duration::from_secs(self.config.step_timeout_secs),
+            self.cancel.clone(),
+        )
+        .await
+        {
             Ok(out) => StepOutcome {
                 screenshot: None,
                 context: out.clone(),

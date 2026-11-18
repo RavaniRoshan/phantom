@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 
 from .. import prompts
+from ..vision import encode_image
 from ..schema import ACTION_TOOL, PLAN_TOOL, as_openai_tool, normalize_action_dict, normalize_plan_dict
 from .base import ActionDecision, DecideRequest, LLMProvider, PlanRequest, SubTask
 
@@ -30,7 +30,7 @@ class OpenAIProvider(LLMProvider):
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": f"data:image/png;base64,{base64.b64encode(req.screenshot).decode('ascii')}"
+                        "url": encode_image(req.screenshot, req.screenshot_mime)
                     },
                 },
             )

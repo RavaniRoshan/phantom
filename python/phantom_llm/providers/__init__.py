@@ -10,6 +10,9 @@ _PROVIDERS = {
     # NVIDIA NIM (OpenAI-compatible) — free-tier vision models for zero-cost
     # live visual-reasoning testing. Keeps the neutral schema (no lock-in).
     "nvidia": "nvidia:NvidiaProvider",
+    # B3: OpenRouter is OpenAI-compatible; local servers are Ollama-compatible.
+    "openrouter": "openai:OpenAIProvider",
+    "local": "ollama:OllamaProvider",
     # Offline, deterministic, SDK-free provider — runs the whole stack without
     # an API key. Used for end-to-end tests and demos.
     "mock": "mock:MockProvider",

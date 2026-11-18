@@ -64,7 +64,7 @@ impl MasterPlanner {
         // like the classic `Agent::run`, just without re-planning).
         if plan.steps.is_empty() {
             let agent = Agent::new(self.config.clone(), self.client.clone());
-            return agent.run_subtask(task, tx).await;
+            return agent.run_subtask(task, tx).await.map(|_| ());
         }
 
         // 2. Fan out: one worker per sub-task, bounded by `max_parallel()`.

@@ -80,7 +80,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     match handle.await {
-        Ok(Ok(())) => println!(">> agent finished"),
+        Ok(Ok(_)) => println!(">> agent finished"),
         Ok(Err(e)) => {
             eprintln!(">> agent error: {e}");
             std::process::exit(1);

@@ -17,13 +17,13 @@ provider returns — no vendor lock-in, no schema drift.
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import re
 from typing import Any
 
 from .. import prompts
+from ..vision import encode_image
 from ..schema import normalize_action_dict, normalize_plan_dict
 from .base import ActionDecision, DecideRequest, LLMProvider, PlanRequest, SubTask
 
@@ -127,8 +127,7 @@ class NvidiaProvider(LLMProvider):
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": "data:image/png;base64,"
-                        + base64.b64encode(req.screenshot).decode("ascii")
+                        "url": encode_image(req.screenshot, req.screenshot_mime)
                     },
                 },
             )

@@ -8,14 +8,16 @@ use crate::tui::widgets::{render_input, summarize_params};
 use crate::tui::Term;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
-use phantom_core::{Agent, AgentEvent, ApprovalDecision, ApprovalQueue, Config, Mode, PendingApproval};
+use phantom_core::{
+    Agent, AgentEvent, ApprovalDecision, ApprovalQueue, Config, Mode, PendingApproval, PhantomClient,
+};
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use ratatui::widgets::Paragraph;
 use std::path::PathBuf;
 use std::time::Duration;
-use tokio::sync::mpsc::{channel, Receiver};
+use tokio::sync::mpsc::{channel, unbounded_channel, UnboundedSender};
 
 /// A single line/block in the chat transcript.
 #[derive(Debug, Clone)]
@@ -53,7 +55,17 @@ pub struct App {
     scroll: u16,
     task_count: u32,
     should_quit: bool,
-    events: Option<Receiver<AgentEvent>>,
+    /// W0.14: the client is kept so every submitted task gets a FRESH Agent
+    /// (and therefore fresh browser/desktop state) instead of a clone sharing
+    /// one backend.
+    client: Option<PhantomClient>,
+    /// Per-task event multiplexer: every task forwards `(task_id, event)` here,
+    /// so no receiver is ever overwritten when a second task is submitted.
+    event_tx: UnboundedSender<(u64, AgentEvent)>,
+    events: Option<tokio::sync::mpsc::UnboundedReceiver<(u64, AgentEvent)>>,
+    /// Visible task list with per-task status.
+    tasks: Vec<TaskRow>,
+    next_task_id: u64,
     /// Index of the selected field in the editable settings form.
     settings_field: usize,
     /// When `Some`, the user is editing a field; the string is the live buffer.
@@ -70,16 +82,30 @@ pub struct App {
     approval_snapshot: Vec<PendingApproval>,
 }
 
+/// One row in the visible task list (W0.14).
+#[derive(Debug, Clone)]
+struct TaskRow {
+    id: u64,
+    label: String,
+    status: String,
+}
+
 /// Internal select! discriminator for keyboard vs. agent events.
 enum Input {
     Key(anyhow::Result<Option<KeyEvent>>),
-    Agent(Option<AgentEvent>),
+    Agent(Option<(u64, AgentEvent)>),
 }
 
 impl App {
-    pub fn new(config: Config, agent: Option<Agent>, approval: Option<ApprovalQueue>) -> Self {
+    pub fn new(
+        config: Config,
+        agent: Option<Agent>,
+        client: Option<PhantomClient>,
+        approval: Option<ApprovalQueue>,
+    ) -> Self {
         let provider = config.provider.clone();
         let mode = config.mode;
+        let (event_tx, event_rx) = unbounded_channel::<(u64, AgentEvent)>();
         let mut app = App {
             config,
             agent,
@@ -92,7 +118,11 @@ impl App {
             scroll: 0,
             task_count: 0,
             should_quit: false,
-            events: None,
+            client,
+            event_tx,
+            events: Some(event_rx),
+            tasks: Vec::new(),
+            next_task_id: 1,
             settings_field: 0,
             settings_edit: None,
             settings_cursor: 0,
@@ -112,23 +142,24 @@ impl App {
 
     /// Run the main event/render loop until quit.
     pub async fn run(&mut self, terminal: &mut Term) -> Result<()> {
-        let mut rx = self.events.take();
+        // A single, stable multiplexed receiver for the lifetime of the app.
+        let mut rx = self
+            .events
+            .take()
+            .expect("event receiver must exist for the app lifetime");
         loop {
-            if rx.is_none() {
-                rx = self.events.take();
-            }
             terminal.draw(|f| self.draw(f))?;
 
             let input = tokio::select! {
                 key = poll_key() => Input::Key(key),
-                evt = recv_event(&mut rx) => Input::Agent(evt),
+                evt = rx.recv() => Input::Agent(evt),
             };
 
             match input {
                 Input::Key(Ok(Some(k))) => self.handle_key(k).await?,
                 Input::Key(Ok(None)) => {}
                 Input::Key(Err(e)) => return Err(e),
-                Input::Agent(Some(e)) => self.handle_agent_event(e),
+                Input::Agent(Some((id, e))) => self.handle_agent_event(id, e),
                 Input::Agent(None) => {}
             }
 
@@ -154,7 +185,12 @@ impl App {
             ])
             .split(f.area());
 
-        let status = status_line(self.mode, &self.provider, self.task_count);
+        let running = self
+            .tasks
+            .iter()
+            .filter(|t| t.status == "running" || t.status == "planning")
+            .count() as u32;
+        let status = status_line(self.mode, &self.provider, self.task_count, running);
         f.render_widget(
             Paragraph::new(status).style(status_style(self.mode)),
             chunks[0],
@@ -310,6 +346,18 @@ impl App {
                 ));
             }
             Command::Clear => self.messages.clear(),
+            Command::Tasks => {
+                if self.tasks.is_empty() {
+                    self.push(Msg::System("No tasks yet.".into()));
+                } else {
+                    let lines: Vec<String> = self
+                        .tasks
+                        .iter()
+                        .map(|t| format!("  #{} [{}] {}", t.id, t.status, t.label))
+                        .collect();
+                    self.push(Msg::System(format!("Tasks:\n{}", lines.join("\n"))));
+                }
+            }
             Command::Quit => self.should_quit = true,
             Command::Provider(p) => {
                 self.provider = p.clone();
@@ -338,34 +386,88 @@ impl App {
 
     async fn submit_task(&mut self, task: &str) -> Result<()> {
         self.task_count += 1;
-        self.push(Msg::User(task.to_string()));
+        let id = self.next_task_id;
+        self.next_task_id += 1;
+        self.push(Msg::User(format!("[task {id}] {task}")));
+        self.tasks.push(TaskRow {
+            id,
+            label: task.to_string(),
+            status: "queued".to_string(),
+        });
 
-        let Some(agent) = self.agent.clone() else {
+        let Some(client) = self.client.clone() else {
+            self.set_task_status(id, "failed");
             self.push(Msg::Error(
                 "LLM service unreachable — start `python -m phantom_llm.server`.".into(),
             ));
             return Ok(());
         };
 
-        let (tx, rx) = channel(64);
+        // W0.14: a FRESH Agent per task. Cloning one Agent would share its
+        // Arc<Mutex<Option<Backend>>> browser/desktop state across tasks, so a
+        // later task would drive the same page/desktop invisibly.
+        let cfg = self.config.clone();
+        let approval = self.approval.clone();
+        let mux = self.event_tx.clone();
         let task_owned = task.to_string();
         tokio::spawn(async move {
-            let _ = agent.run(&task_owned, tx).await;
+            let mut agent = Agent::new(cfg, client);
+            agent.set_approval_queue(approval);
+            let (tx, mut rx) = channel(64);
+            let run = tokio::spawn(async move { agent.run(&task_owned, tx).await });
+
+            // Forward every event, tagged with its task id, to the stable UI
+            // multiplexer. Two tasks can now report progress simultaneously.
+            while let Some(ev) = rx.recv().await {
+                if mux.send((id, ev)).is_err() {
+                    break;
+                }
+            }
+            // Surface a typed failure even if no Error event made it through.
+            match run.await {
+                // On success the agent already emitted Result; don't duplicate.
+                Ok(Ok(_)) => {}
+                Ok(Err(e)) => {
+                    let _ = mux.send((id, AgentEvent::Error(e.to_string())));
+                }
+                Err(e) => {
+                    let _ = mux.send((id, AgentEvent::Error(format!("task panicked: {e}"))));
+                }
+            }
         });
-        self.events = Some(rx);
+        self.set_task_status(id, "running");
         Ok(())
     }
 
-    fn handle_agent_event(&mut self, e: AgentEvent) {
+    fn set_task_status(&mut self, id: u64, status: &str) {
+        if let Some(row) = self.tasks.iter_mut().find(|t| t.id == id) {
+            row.status = status.to_string();
+        }
+    }
+
+    fn handle_agent_event(&mut self, id: u64, e: AgentEvent) {
+        let tag = format!("[task {id}] ");
         match e {
-            AgentEvent::Plan(steps) => self.push(Msg::Plan(steps)),
-            AgentEvent::Action(a) => self.push(Msg::Action(a)),
-            AgentEvent::Thinking(c) => self.push(Msg::Thinking(c.text, c.phase)),
-            AgentEvent::Result(s) => self.push(Msg::System(format!("✓ {s}"))),
+            AgentEvent::Plan(steps) => {
+                self.set_task_status(id, "planning");
+                self.push(Msg::Plan(steps));
+            }
+            AgentEvent::Action(a) => {
+                self.set_task_status(id, "running");
+                self.push(Msg::Action(a));
+            }
+            AgentEvent::Thinking(c) => self.push(Msg::Thinking(format!("{tag}{}", c.text), c.phase)),
+            AgentEvent::Result(s) => {
+                self.set_task_status(id, "done");
+                self.push(Msg::System(format!("✓ {tag}{s}")));
+            }
             // Screenshots stream separately (the TUI does not render images);
             // they are surfaced by the headless runtime check instead.
             AgentEvent::Screenshot(_) => {}
-            AgentEvent::Error(s) => self.push(Msg::Error(s)),
+            AgentEvent::Error(s) => {
+                self.set_task_status(id, "failed");
+                self.push(Msg::Error(format!("{tag}{s}")));
+            }
         }
     }
 
@@ -451,7 +553,9 @@ impl App {
             1 => self.config.mode.to_string(),
             2 => self.config.model.clone(),
             3 => self.config.llm_endpoint.clone(),
-            4 => self.config.api_key.clone(),
+            // W0.9: the API key lives in Credential Manager, never in config.
+            // Seed the edit buffer empty so a fresh value replaces it.
+            4 => String::new(),
             5 => self.config.grpc_endpoint.clone(),
             6 => self.config.max_iterations.to_string(),
             7 => self
@@ -477,7 +581,16 @@ impl App {
             },
             2 => self.config.model = v,
             3 => self.config.llm_endpoint = v,
-            4 => self.config.api_key = v,
+            4 => {
+                // W0.9: write to the OS credential store, not config.toml.
+                match phantom_core::secrets::set_secret(
+                    phantom_core::secrets::API_KEY_TARGET,
+                    &v,
+                ) {
+                    Ok(()) => self.push(Msg::System("API key stored in Credential Manager".into())),
+                    Err(e) => self.push(Msg::Error(format!("could not store API key: {e}"))),
+                }
+            }
             5 => self.config.grpc_endpoint = v,
             6 => match v.parse::<u32>() {
                 Ok(n) if n > 0 => self.config.max_iterations = n,
@@ -550,9 +663,5 @@ async fn poll_key() -> anyhow::Result<Option<KeyEvent>> {
     }
 }
 
-async fn recv_event(rx: &mut Option<Receiver<AgentEvent>>) -> Option<AgentEvent> {
-    match rx {
-        Some(r) => r.recv().await,
-        None => std::future::pending().await,
-    }
-}
+// `recv_event` was removed: the app now owns one stable multiplexed receiver,
+// so no task can overwrite another's channel (W0.14).

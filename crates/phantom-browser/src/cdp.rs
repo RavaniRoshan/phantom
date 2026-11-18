@@ -15,6 +15,9 @@ use std::path::PathBuf;
 use tokio::task::JoinHandle;
 
 use crate::actions::ActionResult;
+use crate::extraction::{html_to_context, DEFAULT_MAX_TOKENS};
+use crate::waits::wait_until;
+use std::time::Duration;
 
 /// Resolve the Chromium/Chrome executable to use.
 ///
@@ -173,9 +176,40 @@ impl BrowserBackend {
         Ok(())
     }
 
-    /// Current page HTML (used as `current_context`).
+    /// Bounded page context (W2.1): raw HTML is converted to compact text and
+    /// capped at 8k tokens with a truncation marker.
     pub async fn content(&self) -> anyhow::Result<String> {
-        Ok(self.page.content().await?)
+        let html = self.page.content().await?;
+        Ok(html_to_context(&html, DEFAULT_MAX_TOKENS))
+    }
+
+    /// Wait for a selector to appear (W2.2), bounded by a timeout.
+    pub async fn wait_for_selector(&self, selector: &str, timeout: Duration) -> anyhow::Result<()> {
+        wait_until(
+            || async { Ok(self.page.find_element(selector).await.is_ok()) },
+            timeout,
+        )
+        .await
+    }
+
+    /// Scroll the viewport by `dy` pixels (W2.3).
+    pub async fn scroll(&self, dy: i32) -> anyhow::Result<()> {
+        self.page
+            .evaluate_expression(format!("window.scrollBy(0, {dy});"))
+            .await?;
+        Ok(())
+    }
+
+    /// Press a key on an element (W2.3). chromiumoxide exposes this on Element,
+    /// so default to `body` when the action has no selector.
+    pub async fn press_key(&self, key: &str, selector: Option<&str>) -> anyhow::Result<()> {
+        let sel = selector.unwrap_or("body");
+        self.page
+            .find_element(sel)
+            .await?
+            .press_key(key)
+            .await?;
+        Ok(())
     }
 
     /// Capture a PNG screenshot of the current page.
@@ -215,6 +249,39 @@ impl BrowserBackend {
                     .ok_or_else(|| anyhow::anyhow!("type_text requires 'text'"))?;
                 let sel = action.params.get("selector").map(|s| s.as_str());
                 self.type_text(text, sel).await?;
+            }
+            "scroll" => {
+                let dy = action
+                    .params
+                    .get("dy")
+                    .and_then(|v| v.parse().ok())
+                    .or_else(|| action.params.get("amount").and_then(|v| v.parse().ok()))
+                    .unwrap_or(400);
+                self.scroll(dy).await?;
+            }
+            "press_key" => {
+                let key = action
+                    .params
+                    .get("key")
+                    .ok_or_else(|| anyhow::anyhow!("press_key requires 'key'"))?;
+                let selector = action.params.get("selector").map(|s| s.as_str());
+                self.press_key(key, selector).await?;
+            }
+            "wait_for_selector" | "wait" => {
+                let selector = action.params.get("selector");
+                let timeout_ms = action
+                    .params
+                    .get("timeout_ms")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(10_000u64);
+                if let Some(sel) = selector {
+                    self.wait_for_selector(sel, Duration::from_millis(timeout_ms))
+                        .await?;
+                } else if action.action == "wait" {
+                    tokio::time::sleep(Duration::from_millis(timeout_ms)).await;
+                } else {
+                    anyhow::bail!("wait_for_selector requires 'selector'");
+                }
             }
             "extract_content" | "screenshot" => {
                 // Observation-only actions; state is captured below.

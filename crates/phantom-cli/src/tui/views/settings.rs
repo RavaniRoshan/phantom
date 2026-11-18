@@ -13,7 +13,7 @@ pub const SETTINGS_FIELDS: &[(&str, &str)] = &[
     ("mode", "Operating mode (safe|hero)"),
     ("model", "LLM model name (blank = provider default)"),
     ("llm_endpoint", "LLM base URL (Ollama / self-hosted / NIM)"),
-    ("api_key", "API key (or set env PHANTOM_API_KEY)"),
+    ("api_key", "API key (stored in Credential Manager; env PHANTOM_API_KEY overrides)"),
     ("grpc_endpoint", "gRPC LLM service address"),
     ("max_iterations", "Max DecideAction iterations per task"),
     ("allowed_folders", "Safe-mode folders (;-separated)"),

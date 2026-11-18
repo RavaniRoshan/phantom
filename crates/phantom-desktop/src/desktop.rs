@@ -10,24 +10,30 @@
 //! surface and should be validated on a Windows `x86_64-pc-windows-msvc` target.
 
 use anyhow::{anyhow, Result};
+use std::ffi::c_void;
 use std::mem::{self, zeroed};
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
+    CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
     ReleaseDC, SelectObject, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, HBITMAP, HDC,
-    SRCCOPY,
 };
-use windows::Win32::Storage::Xps::{PrintWindow, PW_CLIENTONLY};
+use image::{ImageFormat, RgbImage};
+use std::io::Cursor;
+
+use crate::Image;
+use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS, PW_CLIENTONLY};
 use windows::Win32::System::StationsAndDesktops::{
-    CloseDesktop, CreateDesktopW, SetThreadDesktop, DESKTOP_CONTROL_FLAGS, HDESK,
+    CloseDesktop, CreateDesktopW, GetProcessWindowStation, GetThreadDesktop,
+    GetUserObjectInformationW, SetThreadDesktop, DESKTOP_CONTROL_FLAGS, HDESK, UOI_NAME,
 };
 use windows::Win32::System::Threading::{
-    CreateProcessW, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTUPINFOW, TerminateProcess,
-    Sleep,
+    CreateProcessW, GetCurrentThreadId, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTUPINFOW,
+    TerminateProcess, Sleep,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, FindWindowExW, GetClientRect, GetForegroundWindow, IsWindowVisible, PostMessageW,
-    SetForegroundWindow, ShowWindow, SW_RESTORE, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    SetForegroundWindow, ShowWindow, SW_RESTORE, SW_SHOWNORMAL, PW_RENDERFULLCONTENT,
+    WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
 use crate::input;
 
@@ -37,9 +43,41 @@ const DESKTOP_NAME: &str = "PhantomDesktop";
 /// Generic all-access for the desktop object (GENERIC_ALL == 0x10000000).
 const GENERIC_ALL_ACCESS: u32 = 0x1000_0000;
 
-/// Build the `WinSta0`-prefixed desktop path used in `STARTUPINFO.lpDesktop`.
-fn desktop_path_for(name: &str) -> String {
-    format!("WinSta0\\{name}")
+/// Query the name of the window station the current process actually belongs
+/// to. Hard-coding `WinSta0` is wrong when the agent runs in a service or
+/// non-interactive window station — the child would be launched on a desktop
+/// of that name in the WRONG station (or fall back to the user's screen).
+fn current_station_name() -> String {
+    unsafe {
+        let station = match GetProcessWindowStation() {
+            Ok(h) => h,
+            Err(e) => {
+                tracing::warn!("GetProcessWindowStation failed: {e}");
+                return "WinSta0".to_string();
+            }
+        };
+        let mut buf = [0u16; 256];
+        let mut needed = 0u32;
+        if GetUserObjectInformationW(
+            windows::Win32::Foundation::HANDLE(station.0),
+            UOI_NAME,
+            Some(buf.as_mut_ptr() as *mut c_void),
+            (buf.len() * 2) as u32,
+            Some(&mut needed),
+        )
+        .is_err()
+        {
+            tracing::warn!("GetUserObjectInformationW(UOI_NAME) failed");
+            return "WinSta0".to_string();
+        }
+        let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        String::from_utf16_lossy(&buf[..len])
+    }
+}
+
+/// Build the `<station>\<desktop>` path used in `STARTUPINFO.lpDesktop`.
+fn desktop_path_for(station: &str, name: &str) -> String {
+    format!("{station}\\{name}")
 }
 
 /// A hidden Win32 desktop running a sandboxed process.
@@ -49,6 +87,9 @@ pub struct VirtualDesktop {
     /// The desktop's name (e.g. `PhantomDesktop` or `PhantomWorker_2`), used to
     /// build the `lpDesktop` path when launching further processes onto it.
     name: String,
+    /// The window station this desktop was created in (diagnostics + correct
+    /// `lpDesktop` path — see current_station_name above).
+    station: String,
 }
 
 // SAFETY: `VirtualDesktop` owns only Win32 kernel handles (a desktop `HDESK` and
@@ -73,6 +114,8 @@ impl VirtualDesktop {
     pub async fn launch_named(name: &str) -> Result<Self> {
         let name_wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
         let name_pc = windows::core::PCWSTR(name_wide.as_ptr());
+        let station = current_station_name();
+        tracing::info!("creating hidden desktop '{name}' on window station '{station}'");
 
         let handle = unsafe {
             CreateDesktopW(
@@ -91,13 +134,29 @@ impl VirtualDesktop {
         let process = spawn_on_desktop(
             "cmd.exe",
             "/c ping -n 9999999 127.0.0.1 > nul",
-            &desktop_path_for(name),
+            &desktop_path_for(&station, name),
         )?;
+
+        // Verify the thread can actually bind to the new desktop. A silent
+        // failure here is the root cause of "app appears on the user's screen".
+        unsafe {
+            if SetThreadDesktop(handle).is_err() {
+                tracing::warn!("SetThreadDesktop failed for '{name}' on station '{station}'");
+            }
+            match GetThreadDesktop(GetCurrentThreadId()) {
+                Ok(current) => tracing::info!(
+                    "thread desktop matches hidden desktop: {}",
+                    current.0 == handle.0
+                ),
+                Err(e) => tracing::warn!("GetThreadDesktop failed: {e}"),
+            }
+        }
 
         Ok(Self {
             handle,
             process,
             name: name.to_string(),
+            station,
         })
     }
 
@@ -106,15 +165,60 @@ impl VirtualDesktop {
         &self.name
     }
 
-    /// Open `target` on the hidden desktop. URLs are opened in the default
-    /// browser; anything else is treated as a command line.
+    /// Open `target` on the hidden desktop (W0.7).
+    ///
+    /// The old implementation built `cmd.exe /c start {target}`, which let a
+    /// model-controlled target inject arbitrary shell commands. We now call
+    /// `ShellExecuteW` directly: URLs open in the default browser, app names
+    /// launch as executables, and the target is never parsed by a shell.
+    /// Safe-mode allowlisting happens in `phantom_core::Security` before this
+    /// method is reached.
     pub async fn open(&self, target: &str) -> Result<()> {
-        let cmd = if target.starts_with("http://") || target.starts_with("https://") {
-            format!("cmd.exe /c start {}", target)
-        } else {
-            target.to_string()
+        // Input injection on another desktop requires the calling thread to be
+        // bound to it (this is a no-op if already bound).
+        unsafe {
+            let _ = SetThreadDesktop(self.handle);
+        }
+        if !target.starts_with("http://") && !target.starts_with("https://") {
+            // App targets must be created with an explicit lpDesktop, otherwise
+            // ShellExecuteW launches them on the user's DEFAULT desktop (the
+            // first spike run proved this: open() succeeded but find_window()
+            // saw no window on the hidden desktop). CreateProcessW with the
+            // WinSta0\<name> startup desktop keeps the target isolated. The
+            // target has already been validated by the Safe-mode allowlist,
+            // so splitting executable/args contains no shell metacharacters.
+            let mut parts = target.splitn(2, char::is_whitespace);
+            let app = parts.next().unwrap_or("").trim();
+            let args = parts.next().unwrap_or("").trim();
+            if app.is_empty() {
+                return Err(anyhow!("empty desktop app target"));
+            }
+            spawn_on_desktop(app, args, &desktop_path_for(&self.station, &self.name))?;
+            return Ok(());
+        }
+
+        // URLs rely on ShellExecuteW's registered-protocol handling. The
+        // calling thread is bound to this desktop above; whether the chosen
+        // browser honours that binding is one of the W0.0 spike questions.
+        let verb = to_wide_owned("open");
+        let file = to_wide_owned(target);
+        let empty: Vec<u16> = vec![0];
+        // SAFETY: every wide buffer outlives the call; ShellExecuteW copies
+        // what it needs. HWND::default() means "no owner window".
+        let result = unsafe {
+            windows::Win32::UI::Shell::ShellExecuteW(
+                HWND::default(),
+                windows::core::PCWSTR(verb.as_ptr()),
+                windows::core::PCWSTR(file.as_ptr()),
+                windows::core::PCWSTR(empty.as_ptr()),
+                windows::core::PCWSTR(empty.as_ptr()),
+                SW_SHOWNORMAL,
+            )
         };
-        spawn_on_desktop("cmd.exe", &format!("/c {}", cmd), &desktop_path_for(&self.name))?;
+        let code = result.0 as isize;
+        if code <= 32 {
+            return Err(anyhow!("ShellExecuteW failed for '{target}' (code {code})"));
+        }
         Ok(())
     }
 
@@ -206,12 +310,12 @@ impl VirtualDesktop {
     /// desktop (byte-identical captures). A brand-new thread has a clean desktop
     /// association, so the bind takes effect and the capture is guaranteed to
     /// come from *this* desktop.
-    pub async fn screenshot(&self) -> Result<Vec<u8>> {
+    pub async fn screenshot(&self) -> Result<Image> {
         // `HDESK` is a raw pointer (not `Send`); move it across the thread
         // boundary as an integer and rebuild it on the other side. The handle is
         // a process-wide kernel object, valid from any thread.
         let raw = self.handle.0 as isize;
-        std::thread::spawn(move || -> Result<Vec<u8>> {
+        std::thread::spawn(move || -> Result<Image> {
             unsafe {
                 let handle = HDESK(raw as *mut core::ffi::c_void);
                 // Non-fatal: on the single-desktop path the process desktop is
@@ -221,7 +325,7 @@ impl VirtualDesktop {
                 if hwnd.is_invalid() {
                     return Err(anyhow!("no window to capture on hidden desktop"));
                 }
-                capture_window_bmp(hwnd)
+                capture_window_png(hwnd)
             }
         })
         .join()
@@ -247,8 +351,13 @@ impl Drop for VirtualDesktop {
     }
 }
 
+/// CREATE_NO_WINDOW: console hosts (e.g. the keep-alive `cmd.exe`) must not
+/// create a black console window on the hidden desktop — otherwise
+/// `find_window()` picks it first and every capture is all black.
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// Spawn `app` with `args` so its first thread lands on the desktop at
-/// `desktop_path` (a `WinSta0\<name>` string).
+/// `desktop_path` (a `<station>\<name>` string).
 fn spawn_on_desktop(app: &str, args: &str, desktop_path: &str) -> Result<PROCESS_INFORMATION> {
     let cmd = format!("{} {}", app, args);
     let mut cmd_vec = to_wide_owned(&cmd);
@@ -266,7 +375,7 @@ fn spawn_on_desktop(app: &str, args: &str, desktop_path: &str) -> Result<PROCESS
             None,
             None,
             BOOL(0),
-            PROCESS_CREATION_FLAGS(0),
+            PROCESS_CREATION_FLAGS(CREATE_NO_WINDOW),
             None,
             None,
             &si,
@@ -279,13 +388,27 @@ fn spawn_on_desktop(app: &str, args: &str, desktop_path: &str) -> Result<PROCESS
     Ok(pi)
 }
 
-/// Capture `hwnd` to an in-memory 24-bit BMP and return the file bytes.
-unsafe fn capture_window_bmp(hwnd: HWND) -> Result<Vec<u8>> {
+/// Capture `hwnd` and encode it to PNG at the source (W0.1 / ADR-001).
+///
+/// W0.12 fixes over the previous BMP path:
+///   * `PrintWindow` is the ONLY capture route. The old `BitBlt(dst=dst)`
+///     "fallback" copied an empty offscreen surface onto itself, producing a
+///     black image that was reported as a successful capture.
+///   * `PrintWindow` and `GetDIBits` return values are now checked.
+///   * `GetDIBits` is called only after the bitmap is deselected from the DC
+///     (Windows requires the bitmap not be selected when read).
+///   * An all-black result is a typed error, never a black "success" image.
+unsafe fn capture_window_png(hwnd: HWND) -> Result<Image> {
     let hdc_screen = GetDC(hwnd);
     if hdc_screen.is_invalid() {
         return Err(anyhow!("GetDC failed"));
     }
     let (w, h) = window_size(hwnd)?;
+    if w <= 0 || h <= 0 {
+        let _ = ReleaseDC(hwnd, hdc_screen);
+        return Err(anyhow!("target window has an empty client area ({w}x{h})"));
+    }
+
     let hdc_mem = CreateCompatibleDC(hdc_screen);
     let hbmp = CreateCompatibleBitmap(hdc_screen, w, h);
     let _ = ReleaseDC(hwnd, hdc_screen);
@@ -293,23 +416,55 @@ unsafe fn capture_window_bmp(hwnd: HWND) -> Result<Vec<u8>> {
         if !hdc_mem.is_invalid() {
             let _ = DeleteDC(hdc_mem);
         }
+        if !hbmp.is_invalid() {
+            let _ = DeleteObject(hbmp);
+        }
         return Err(anyhow!("failed to allocate offscreen DC/bitmap"));
     }
 
     let old = SelectObject(hdc_mem, hbmp);
-    let _ = PrintWindow(hwnd, hdc_mem, PW_CLIENTONLY);
-    // Fall back to a raw BitBlt (only works if the desktop is foreground).
-    let _ = BitBlt(hdc_mem, 0, 0, w, h, hdc_mem, 0, 0, SRCCOPY);
+    // PW_RENDERFULLCONTENT is required on modern Windows (DWM-composed apps
+    // render black with plain PW_CLIENTONLY). This is the W0.0 black-capture
+    // hypothesis — if the frame is still black, hidden-desktop capture is a
+    // no-go and the isolated-VM fork must be taken.
+    // PRINT_WINDOW_FLAGS is a newtype without BitOr in windows 0.58; compose
+    // the raw bit values (PW_CLIENTONLY=1, PW_RENDERFULLCONTENT=2).
+    let flags = PRINT_WINDOW_FLAGS(PW_CLIENTONLY.0 | PW_RENDERFULLCONTENT);
+    let printed = PrintWindow(hwnd, hdc_mem, flags);
+    // Deselect BEFORE GetDIBits (the bitmap must not be selected into a DC).
+    let _ = SelectObject(hdc_mem, old);
+    if !printed.as_bool() {
+        let _ = DeleteObject(hbmp);
+        let _ = DeleteDC(hdc_mem);
+        return Err(anyhow!(
+            "PrintWindow failed for target window — capture would be black"
+        ));
+    }
 
-    let bytes = dib_to_bmp(hdc_mem, hbmp, w, h)?;
-    SelectObject(hdc_mem, old);
+    let (rgb, width, height) = dib_to_rgb(hdc_mem, hbmp, w, h)?;
     let _ = DeleteObject(hbmp);
     let _ = DeleteDC(hdc_mem);
-    Ok(bytes)
+
+    // A failed hidden-desktop capture must surface as an error, not as a black
+    // image the model (and user) would interpret as a real observation.
+    assert_non_black(&rgb)?;
+
+    let img = RgbImage::from_raw(width, height, rgb)
+        .ok_or_else(|| anyhow!("DIB dimensions do not match the pixel buffer"))?;
+    let mut cursor = Cursor::new(Vec::new());
+    img.write_to(&mut cursor, ImageFormat::Png)
+        .map_err(|e| anyhow!("PNG encoding failed: {e}"))?;
+    let bytes = cursor.into_inner();
+    Ok(Image {
+        bytes,
+        mime: "image/png".to_string(),
+        width,
+        height,
+    })
 }
 
-/// Read the 24-bit DIB out of `hbmp` and wrap it in a BMP file header.
-unsafe fn dib_to_bmp(hdc: HDC, hbmp: HBITMAP, w: i32, h: i32) -> Result<Vec<u8>> {
+/// Read the 24-bit top-down DIB out of `hbmp` as interleaved RGB bytes.
+unsafe fn dib_to_rgb(hdc: HDC, hbmp: HBITMAP, w: i32, h: i32) -> Result<(Vec<u8>, u32, u32)> {
     let mut bmi: BITMAPINFO = zeroed();
     bmi.bmiHeader.biSize = mem::size_of::<BITMAPINFOHEADER>() as u32;
     bmi.bmiHeader.biWidth = w;
@@ -320,7 +475,8 @@ unsafe fn dib_to_bmp(hdc: HDC, hbmp: HBITMAP, w: i32, h: i32) -> Result<Vec<u8>>
 
     let stride = ((w * 3 + 3) / 4) * 4;
     let mut pixels = vec![0u8; (stride * h) as usize];
-    let _ = GetDIBits(
+    // W0.12: 0 lines read means no pixels were written. This was ignored.
+    let written = GetDIBits(
         hdc,
         hbmp,
         0,
@@ -329,22 +485,33 @@ unsafe fn dib_to_bmp(hdc: HDC, hbmp: HBITMAP, w: i32, h: i32) -> Result<Vec<u8>>
         &mut bmi,
         DIB_RGB_COLORS,
     );
+    if written == 0 {
+        return Err(anyhow!("GetDIBits failed — no pixel data captured"));
+    }
 
-    let file_size = 14 + mem::size_of::<BITMAPINFOHEADER>() as u32 + (stride * h) as u32;
-    let mut out = Vec::with_capacity(file_size as usize);
-    out.extend_from_slice(b"BM");
-    out.extend_from_slice(&file_size.to_le_bytes());
-    out.extend_from_slice(&0u32.to_le_bytes()); // reserved
-    out.extend_from_slice(
-        &(14 + mem::size_of::<BITMAPINFOHEADER>() as u32).to_le_bytes(),
-    ); // pixel offset
-    let header: &[u8] = std::slice::from_raw_parts(
-        &bmi.bmiHeader as *const _ as *const u8,
-        mem::size_of::<BITMAPINFOHEADER>(),
-    );
-    out.extend_from_slice(header);
-    out.extend_from_slice(&pixels);
-    Ok(out)
+    // DIB rows are BGR (bottom-up unless height is negative) and padded to a
+    // 4-byte stride; convert to tightly packed RGB for the PNG encoder.
+    let mut rgb = Vec::with_capacity((w * h * 3) as usize);
+    for y in 0..h as usize {
+        let row = &pixels[y * stride as usize..(y + 1) * stride as usize];
+        for x in 0..w as usize {
+            let i = x * 3;
+            rgb.push(row[i + 2]); // R
+            rgb.push(row[i + 1]); // G
+            rgb.push(row[i]);     // B
+        }
+    }
+    Ok((rgb, w as u32, h as u32))
+}
+
+/// Reject an all-black frame. A capture with no visible content is a failure
+/// (the old code returned it as a valid BMP), so this guards the whole loop.
+fn assert_non_black(rgb: &[u8]) -> Result<()> {
+    if rgb.iter().any(|&channel| channel > 8) {
+        Ok(())
+    } else {
+        Err(anyhow!("capture is entirely black — treating as a failed capture"))
+    }
 }
 
 /// Get a window's client size in pixels.
@@ -417,4 +584,32 @@ fn to_wide_owned(s: &str) -> Vec<u16> {
     let mut v: Vec<u16> = s.encode_utf16().collect();
     v.push(0);
     v
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn png_encoding_has_magic_bytes_and_mime() {
+        let img = RgbImage::from_raw(1, 1, vec![200, 10, 10]).expect("1x1 image");
+        let mut cursor = Cursor::new(Vec::new());
+        img.write_to(&mut cursor, ImageFormat::Png).expect("png write");
+        let bytes = cursor.into_inner();
+        let capture = Image {
+            bytes,
+            mime: "image/png".to_string(),
+            width: 1,
+            height: 1,
+        };
+        assert!(capture.bytes.starts_with(Image::PNG_MAGIC));
+        assert!(capture.is_png());
+        assert_eq!(crate::detect_image_mime(&capture.bytes), "image/png");
+    }
+
+    #[test]
+    fn all_black_capture_is_rejected() {
+        assert!(assert_non_black(&vec![0u8; 3 * 16 * 16]).is_err());
+        assert!(assert_non_black(&[0, 0, 0, 255, 0, 0]).is_ok());
+    }
 }

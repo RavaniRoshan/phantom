@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <!-- W8.1: MSI for Phantom v1. Build with:
+         candle.exe Product.wxs -out obj\
+         light.exe obj\Product.wixobj -out phantom-v1.msi
+       Code-sign the resulting MSI with the release certificate (Azure Artifact
+       Signing / OV cert) before distribution. Do NOT use PyOxidizer or a
+       one-file Python extraction (Defender rescan problem, ADR-006). -->
+  <Product Id="*"
+           Name="Phantom"
+           Language="1033"
+           Version="0.1.0.0"
+           Manufacturer="Phantom"
+           UpgradeCode="E8F2A6C4-9B1D-4C7A-8E3F-2D5B6A7C9E10">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perUser" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Phantom is installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="INSTALLFOLDER" Name="Phantom">
+          <Component Id="DaemonExe" Guid="*">
+            <File Id="phantom_daemon.exe" Source="$(var.BinDir)phantom-daemon.exe" KeyPath="yes" />
+          </Component>
+          <Component Id="CliExe" Guid="*">
+            <File Id="phantom.exe" Source="$(var.BinDir)phantom.exe" KeyPath="yes" />
+            <Shortcut Id="DesktopShortcut" Directory="DesktopFolder"
+                      Name="Phantom" Target="[INSTALLFOLDER]phantom.exe" />
+          </Component>
+          <Directory Id="PythonSidecar" Name="python">
+            <Component Id="PythonRuntime" Guid="*">
+              <File Id="python.exe" Source="$(var.PythonDir)python.exe" KeyPath="yes" />
+            </Component>
+          </Directory>
+        </Directory>
+      </Directory>
+      <Directory Id="DesktopFolder" Name="Desktop" />
+    </Directory>
+
+    <Feature Id="Main" Title="Phantom" Level="1">
+      <ComponentRef Id="DaemonExe" />
+      <ComponentRef Id="CliExe" />
+      <ComponentRef Id="PythonRuntime" />
+    </Feature>
+  </Product>
+</Wix>

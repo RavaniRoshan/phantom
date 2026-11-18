@@ -1,0 +1,200 @@
+- id: desktop-01
+  backend: desktop
+  prompt: 'Using Notepad, complete desktop step 01 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-01.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-01.done']
+- id: desktop-02
+  backend: desktop
+  prompt: 'Using Chrome, complete desktop step 02 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-02.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-02.done']
+- id: desktop-03
+  backend: desktop
+  prompt: 'Using Excel, complete desktop step 03 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-03.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-03.done']
+- id: desktop-04
+  backend: desktop
+  prompt: 'Using Explorer, complete desktop step 04 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-04.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-04.done']
+- id: desktop-05
+  backend: desktop
+  prompt: 'Using Settings dialog, complete desktop step 05 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-05.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-05.done']
+- id: desktop-06
+  backend: desktop
+  prompt: 'Using Notepad, complete desktop step 06 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-06.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-06.done']
+- id: desktop-07
+  backend: desktop
+  prompt: 'Using Chrome, complete desktop step 07 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-07.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-07.done']
+- id: desktop-08
+  backend: desktop
+  prompt: 'Using Excel, complete desktop step 08 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-08.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-08.done']
+- id: desktop-09
+  backend: desktop
+  prompt: 'Using Explorer, complete desktop step 09 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-09.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-09.done']
+- id: desktop-10
+  backend: desktop
+  prompt: 'Using Settings dialog, complete desktop step 10 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-10.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-10.done']
+- id: desktop-11
+  backend: desktop
+  prompt: 'Using Notepad, complete desktop step 11 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-11.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-11.done']
+- id: desktop-12
+  backend: desktop
+  prompt: 'Using Chrome, complete desktop step 12 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-12.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-12.done']
+- id: desktop-13
+  backend: desktop
+  prompt: 'Using Excel, complete desktop step 13 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-13.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-13.done']
+- id: desktop-14
+  backend: desktop
+  prompt: 'Using Explorer, complete desktop step 14 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-14.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-14.done']
+- id: desktop-15
+  backend: desktop
+  prompt: 'Using Settings dialog, complete desktop step 15 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-15.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-15.done']
+- id: desktop-16
+  backend: desktop
+  prompt: 'Using Notepad, complete desktop step 16 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-16.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-16.done']
+- id: desktop-17
+  backend: desktop
+  prompt: 'Using Chrome, complete desktop step 17 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-17.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-17.done']
+- id: desktop-18
+  backend: desktop
+  prompt: 'Using Excel, complete desktop step 18 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-18.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-18.done']
+- id: desktop-19
+  backend: desktop
+  prompt: 'Using Explorer, complete desktop step 19 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-19.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-19.done']
+- id: desktop-20
+  backend: desktop
+  prompt: 'Using Settings dialog, complete desktop step 20 and write a completion marker'
+  setup:
+    - type: mkdir
+      path: '{workdir}/desktop/artifacts'
+  check:
+    type: file_exists
+    path: '{workdir}/desktop/artifacts/desktop-20.done'
+  artifacts: ['{workdir}/desktop/artifacts/desktop-20.done']

@@ -1,0 +1,50 @@
+name: Signed beta release
+
+# B5 — signed NSIS installer + updater artifacts. Signing identity stays the
+# same across releases so SmartScreen reputation accumulates. SignPath first;
+# Artifact Signing is the fallback for eligible organizations/individuals.
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'beta | stable'
+        required: true
+        default: 'beta'
+
+jobs:
+  build-sign:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate third-party notices
+        run: powershell -NoProfile -File scripts/generate-notices.ps1
+
+      - name: Build sidecar and GUI
+        run: |
+          cargo build -p phantom-guest --release
+          cargo build -p phantom-daemon --release
+          cargo install tauri-cli --version "^2" --locked
+          cargo tauri build --config crates/phantom-app/tauri.conf.json
+
+      - name: Sign binaries and installer
+        env:
+          SIGNPATH_WRAPPER: ${{ secrets.SIGNPATH_WRAPPER }}
+          AZURE_ENDPOINT: ${{ secrets.AZURE_ENDPOINT }}
+          AZURE_ACCOUNT: ${{ secrets.AZURE_ACCOUNT }}
+          AZURE_PROFILE: ${{ secrets.AZURE_PROFILE }}
+        run: |
+          powershell -NoProfile -File packaging/sign.ps1 -File target/release/phantom-guest.exe -Mode signpath
+          powershell -NoProfile -File packaging/sign.ps1 -File target/release/phantom-daemon.exe -Mode signpath
+          powershell -NoProfile -File packaging/sign.ps1 -File target/release/bundle/nsis/Phantom_x64-setup.exe -Mode signpath
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phantom-${{ github.event.inputs.channel }}
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/release/bundle/nsis/*.sig
+            THIRDPARTY-NOTICES.md

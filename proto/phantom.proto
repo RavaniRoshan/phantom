@@ -18,12 +18,21 @@ service PhantomLLM {
 
 // What the agent currently perceives, sent to the LLM for the next decision.
 message ActionRequest {
-  bytes screenshot = 1;          // PNG screenshot (visual tasks); empty otherwise
+  bytes screenshot = 1;          // screenshot bytes (visual tasks); empty otherwise
   string task_description = 2;   // the overarching user goal
   string current_context = 3;    // text summary of current screen / state
   repeated ActionHistory history = 4; // actions already taken this task
   string mode = 5;               // "safe" | "hero"
   string backend = 6;            // active backend for this step: browser|cli|file|desktop
+  // W0.1 image transport contract: declared MIME of `screenshot` (ADR-001).
+  // PNG is normalized at capture, so this is normally "image/png". Providers
+  // must honor it rather than hard-coding a media type; empty means "sniff".
+  string screenshot_mime = 7;
+  // B3: per-request model selection (BYOK). `key_ref` names a credential-store
+  // entry, never the secret itself; empty means "use the service default".
+  string provider = 8;
+  string model = 9;
+  string key_ref = 10;
 }
 
 // The single neutral action shape. Every LLM provider maps its native

@@ -108,13 +108,18 @@ async fn main() {
     let mut all_non_blank = true;
     for (i, lease) in leases.iter().enumerate() {
         match lease.screenshot().await {
-            Ok(bytes) => {
-                let non_blank = bmp_non_blank(&bytes);
+            Ok(image) => {
+                // W0.1/W0.12: returned images are PNG and already guaranteed
+                // non-black; is_png() asserts the magic-byte contract.
+                let non_blank = image.is_png();
                 all_non_blank &= non_blank;
-                let p = out_dir.join(format!("pool-worker-{i}.bmp"));
+                let phantom_desktop::Image { bytes, width, height, mime } = image;
+                let p = out_dir.join(format!("pool-worker-{i}.png"));
                 let _ = std::fs::write(&p, &bytes);
                 log!(
-                    "[ok]   screenshot #{i}: {} bytes, non_blank={non_blank} -> {}",
+                    "[ok]   screenshot #{i}: {}x{}, {} bytes, {mime}, png={non_blank} -> {}",
+                    width,
+                    height,
                     bytes.len(),
                     p.display()
                 );
@@ -195,18 +200,5 @@ fn finish(out_dir: &Path, report: &str) {
     }
 }
 
-/// True if a 24-bit BMP has substantial non-zero content (a real capture, not a
-/// black/blank off-screen surface). Mirrors `desktop_smoke`'s threshold.
-fn bmp_non_blank(bytes: &[u8]) -> bool {
-    let pixel_off = if bytes.len() > 54 && &bytes[0..2] == b"BM" {
-        u32::from_le_bytes([bytes[10], bytes[11], bytes[12], bytes[13]]) as usize
-    } else {
-        0
-    };
-    let pixels = bytes.get(pixel_off..).unwrap_or(&[]);
-    if pixels.is_empty() {
-        return false;
-    }
-    let nonzero = pixels.iter().filter(|&&b| b != 0).count();
-    (nonzero as f64 / pixels.len() as f64) > 0.005
-}
+// W0.1/W0.12: black-frame detection moved into `VirtualDesktop::screenshot`
+// and captures are PNG; `Image::is_png()` now asserts the magic-byte contract.
