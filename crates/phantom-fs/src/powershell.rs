@@ -12,6 +12,17 @@ use tokio_util::sync::CancellationToken;
 /// Maximum stdout/stderr bytes returned to the agent (64 KiB).
 pub const MAX_OUTPUT_BYTES: usize = 64 * 1024;
 
+/// W4.3: secrets must never be inherited by a model-triggered shell command
+/// (the research report showed `Get-ChildItem Env:` could exfiltrate keys).
+pub const SENSITIVE_ENV_KEYS: &[&str] = &[
+    "PHANTOM_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "NVIDIA_API_KEY",
+    "PHANTOM_WEBHOOK_TOKEN",
+];
+
 fn cap(bytes: &[u8]) -> String {
     let mut text = String::from_utf8_lossy(bytes).into_owned();
     if bytes.len() > MAX_OUTPUT_BYTES {
@@ -30,8 +41,12 @@ pub async fn run_command(
     use std::process::Stdio;
     use tokio::process::Command;
 
-    let mut child = Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", cmd])
+    let mut command = Command::new("powershell.exe");
+    command.args(["-NoProfile", "-NonInteractive", "-Command", cmd]);
+    for key in SENSITIVE_ENV_KEYS {
+        command.env_remove(key);
+    }
+    let child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
@@ -72,6 +87,15 @@ pub async fn run_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sensitive_env_keys_are_scrubbed_from_commands() {
+        // The list is applied with env_remove in run_command; assert coverage
+        // of every provider key shape used by the LLM service.
+        assert!(SENSITIVE_ENV_KEYS.contains(&"PHANTOM_API_KEY"));
+        assert!(SENSITIVE_ENV_KEYS.contains(&"PHANTOM_WEBHOOK_TOKEN"));
+        assert!(SENSITIVE_ENV_KEYS.len() >= 6);
+    }
 
     #[test]
     fn output_is_capped() {

@@ -12,6 +12,8 @@ pub mod orchestrator;
 pub mod router;
 pub mod secrets;
 pub mod security;
+pub mod injection;
+pub mod policy;
 pub mod queue;
 pub mod store;
 pub mod stream;

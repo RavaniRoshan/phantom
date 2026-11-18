@@ -53,6 +53,47 @@ impl Sandbox {
     }
 }
 
+/// W4.4: resolve symlinks / canonical paths and ensure the result stays within
+/// `root`. Call before any mutating file operation in Safe mode.
+pub fn canonicalize_within(root: &Path, path: &Path) -> Result<PathBuf> {
+    let root_norm = normalize(root);
+    let candidate = if path.exists() {
+        strip_verbatim(std::fs::canonicalize(path).map_err(|e| {
+            FsError::Security(format!("cannot resolve {}: {e}", path.display()))
+        })?)
+    } else {
+        normalize(path)
+    };
+    let root_real = if root.exists() {
+        strip_verbatim(
+            std::fs::canonicalize(root)
+                .map_err(|e| FsError::Security(format!("cannot resolve root: {e}")))?,
+        )
+    } else {
+        root_norm
+    };
+    if candidate.starts_with(&root_real) {
+        Ok(candidate)
+    } else {
+        Err(FsError::Security(format!(
+            "path {} escapes {} after canonicalization",
+            path.display(),
+            root.display()
+        )))
+    }
+}
+
+/// Windows canonicalize() returns a `\\?\` verbatim path; normalize() does not.
+/// Strip that prefix so containment comparisons use the same form.
+fn strip_verbatim(p: PathBuf) -> PathBuf {
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix("\\\\?\\") {
+        PathBuf::from(rest)
+    } else {
+        p
+    }
+}
+
 /// Lexically normalize `.` and `..` components (component-wise, no FS access).
 fn normalize(p: &Path) -> PathBuf {
     let mut out = PathBuf::new();
@@ -74,6 +115,16 @@ mod tests {
 
     fn sandbox() -> Sandbox {
         Sandbox::new(FsMode::Safe, vec![PathBuf::from("/safe")])
+    }
+
+    #[test]
+    fn canonicalize_rejects_escape_after_normalization() {
+        use super::*;
+        let root = std::env::temp_dir().join(format!("phantom-canon-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&root);
+        assert!(canonicalize_within(&root, &root.join("ok.txt")).is_ok());
+        assert!(canonicalize_within(&root, &root.join("..").join("escape.txt")).is_err());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
