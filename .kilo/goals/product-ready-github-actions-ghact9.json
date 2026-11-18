@@ -1,0 +1,57 @@
+{
+  "id": "ghact9",
+  "slug": "product-ready-github-actions-ghact9",
+  "objective": "Use GitHub Actions to close the remaining external validation gates, then build and deploy a product-oriented showcase/landing page plus combined documentation site (Blume framework/theme), commit, push, and deploy via GitHub Pages.",
+  "status": "active",
+  "branch": "goal/product-ready-github-actions-ghact9",
+  "scope": "whole repository (Windows-first Rust + Python agent)",
+  "scope_lock": ["crates/", "python/", "proto/", "docs/", "research/"],
+  "scope_flex": ["scripts/", ".github/", ".kilo/", "packaging/"],
+  "criteria": [
+    {
+      "label": "Branch pushed and windows-gui-golden workflow visible on GitHub",
+      "check": "gh workflow list --json name -q '.[].name' | Select-String 'Windows GUI golden'",
+      "must_pass": true
+    },
+    {
+      "label": "windows-gui-golden workflow completed successfully",
+      "check": "gh run list --workflow windows-gui-golden.yml --limit 1 --json conclusion -q '.[0].conclusion'",
+      "must_pass": true
+    },
+    {
+      "label": "Capture artifact is a non-black PNG (live proof)",
+      "check": "python -m unittest python.tests.test_gh_evidence -v",
+      "must_pass": true,
+      "coverage_gate": true
+    },
+    {
+      "label": "Local verification remains green",
+      "check": "powershell -NoProfile -File scripts/verify-all.ps1",
+      "must_pass": true
+    },
+    {
+      "label": "Release gates updated with GitHub Actions evidence, still honest",
+      "check": "python -m unittest python.tests.test_release_gate_evidence -v",
+      "must_pass": true
+    }
+  ],
+  "tasks": [
+    {"id": 1, "desc": "Pause previous goal, create/claim this goal, branch goal/product-ready-github-actions-ghact9.", "status": "todo"},
+    {"id": 2, "desc": "Push branch to origin and confirm the windows-gui-golden workflow is visible on GitHub.", "status": "todo"},
+    {"id": 3, "desc": "Dispatch windows-gui-golden workflow on this branch and wait for conclusion.", "status": "todo"},
+    {"id": 4, "desc": "Download guest-capture artifact, verify PNG magic/dimensions/non-black, write evidence report.", "status": "todo"},
+    {"id": 5, "desc": "Add Python verifiers for the evidence and release-gate honesty; run verify-all.", "status": "todo"},
+    {"id": 6, "desc": "Update docs/benchmarks/release-gates.md with the real GitHub Actions result; commit each unit.", "status": "todo"},
+    {"id": 7, "desc": "Research/identify Blume framework; choose docs generator + custom Blume theme; document the decision.", "status": "todo"},
+    {"id": 8, "desc": "Build product-oriented showcase + landing page + combined docs site (high-agency-grade visual design).", "status": "todo"},
+    {"id": 9, "desc": "Add GitHub Pages deployment workflow; commit, push, verify live site.", "status": "todo"}
+  ],
+  "current_task": 1,
+  "iterations": 0,
+  "budget_used": 0,
+  "max_iterations": 50,
+  "negative_knowledge": [],
+  "context_summary": "Goal created after confirming GitHub access: origin git@github.com:RavaniRoshan/phantom.git, gh authenticated as RavaniRoshan (repo scope), public repo. Local workflows windows-gui-golden.yml and release.yml exist but are not yet pushed, hence not visible in gh workflow list. AWS EC2 remains externally blocked; GitHub Actions is the active path.",
+  "created_at": "2026-11-18T12:00:00Z",
+  "updated_at": "2026-11-18T12:00:00Z"
+}

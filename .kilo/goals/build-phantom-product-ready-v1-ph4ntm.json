@@ -2,7 +2,7 @@
   "id": "ph4ntm",
   "slug": "build-phantom-product-ready-v1-ph4ntm",
   "objective": "Implement docs/DEVELOPMENT-PLAN.md to product-ready v1: land all Phase 0 correctness/safety blockers with tests and ADRs, then work through W1-W8 workstreams in plan order. Persistent across sessions; work until all criteria pass or a halt condition is hit.",
-  "status": "active",
+  "status": "paused",
   "branch": "goal/build-phantom-product-ready-v1-ph4ntm",
   "scope": "whole repository (Windows-first Rust + Python agent)",
   "scope_lock": ["crates/", "python/", "proto/", "docs/", "research/"],
