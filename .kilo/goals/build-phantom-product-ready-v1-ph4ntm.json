@@ -73,11 +73,11 @@
     {"id": 11, "desc": "W2 Browser backend: bounded 8k-token extraction + truncation marker, async waits, scroll/press_key/wait_for_selector actions, persistent profiles, semantic selector grounding (7 browser tests pass)", "status": "done"},
     {"id": 12, "desc": "W3 Reliability: SQLite RunStore (tasks/steps/artifacts + migrations), tamper-evident AuditLog hash chain, priority TaskQueue with dedupe/retry/dead-letter and error classification (6 tests pass)", "status": "done"},
     {"id": 13, "desc": "W4 Safety: capability PolicyEngine with 50-case red-team test, prompt-injection isolation, shell env scrubbing, canonical path safety, threat model (8 new tests; 69 Rust tests total pass)", "status": "done"},
-    {"id": 14, "desc": "W5/W6/W7 Product surface, orchestration, verification: task UI, notifications, swarm DAG, verifier pass, re-planning", "status": "todo"},
+    {"id": 14, "desc": "W5/W6/W7: plan DAG scheduler + backend enforcement, artifacts + reversible trash, notifications sink, verifier criteria + bounded re-planning, friendly errors (80 Rust tests pass)", "status": "done"},
     {"id": 15, "desc": "W8 Packaging + GA: installer, service/autostart, wizard, updater, support bundle, docs, release QA; full section-1 gates", "status": "todo"}
   ],
-  "current_task": 14,
-  "iterations": 14,
+  "current_task": 15,
+  "iterations": 15,
   "budget_used": 0,
   "max_iterations": 50,
   "negative_knowledge": [
