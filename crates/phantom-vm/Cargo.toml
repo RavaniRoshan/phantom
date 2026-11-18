@@ -11,6 +11,9 @@ tokio.workspace = true
 async-trait = "0.1"
 phantom-desktop = { path = "../phantom-desktop" }
 tracing.workspace = true
+reqwest = { version = "0.12", features = ["json"] }
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true

@@ -4076,6 +4076,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "phantom-guest"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "image",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "windows 0.58.0",
+]
+
+[[package]]
 name = "phantom-proto"
 version = "0.1.0"
 dependencies = [
@@ -4093,6 +4108,9 @@ dependencies = [
  "anyhow",
  "async-trait",
  "phantom-desktop",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "tracing",

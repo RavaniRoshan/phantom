@@ -5,6 +5,9 @@
 //! contract and a pool; concrete providers (Hyper-V, Cloud PC) plug in behind
 //! [`VmBackend`], and [`MockVmBackend`] keeps CI hermetic.
 
+pub mod guest;
+pub mod hyperv;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use phantom_desktop::Image;

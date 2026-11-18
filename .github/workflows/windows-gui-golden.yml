@@ -1,0 +1,41 @@
+name: Windows GUI golden (B4/B6)
+
+# GitHub-hosted windows-2022 has a real interactive WinSta0 desktop. The whole
+# capture proof runs INSIDE the workflow — no inbound RDP, no reverse tunnels,
+# no local VM RAM. Public repos get free hosted minutes (6h/job cap).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  guest-capture:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build guest agent
+        run: cargo build -p phantom-guest
+
+      - name: Verify live non-black capture
+        run: powershell -NoProfile -File scripts/verify-guest-capture.ps1
+
+      - name: Upload capture evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guest-capture
+          path: guest-capture.png
+          if-no-files-found: warn
+
+  golden-harness:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Deterministic golden tasks
+        run: cargo run -p phantom-core --example bench
