@@ -1,4 +1,8 @@
-"""B2 — Tauri GUI shell is a thin client of the control plane."""
+"""B2 — Tauri GUI shell is a thin client of the control plane.
+
+The frontend is a React 19 / Vite app built into the Tauri frontendDist folder;
+the source of truth for the screens is frontend-src/src/App.tsx.
+"""
 
 import sys
 import unittest
@@ -22,14 +26,26 @@ class GuiShellTest(unittest.TestCase):
         self.assertIn("http://127.0.0.1:4546", src)
 
     def test_frontend_has_required_screens(self):
-        html = read("crates/phantom-app/frontend/index.html")
+        source = read("frontend-src/src/App.tsx")
         for id_ in ("composer", "activity", "task-list", "approval", "settings", "vm-pill"):
-            self.assertIn(f'id="{id_}"', html, f"missing UI element {id_}")
+            self.assertIn(f'id="{id_}"', source, f"missing UI element {id_}")
+        # Vite must emit into the folder Tauri serves.
+        self.assertIn('outDir: "../crates/phantom-app/frontend"', read("frontend-src/vite.config.ts"))
+        self.assertIn('id="root"', read("frontend-src/index.html"))
+
+    def test_frontend_uses_space_ui_components(self):
+        app = read("frontend-src/src/App.tsx")
+        for component in ("button", "card", "badge", "input", "textarea", "separator", "dialog"):
+            self.assertIn(f'"@/components/ui/{component}"', app, f"missing Space UI component {component}")
+        for cmd in ("submit_task", "list_tasks", "cancel_task", "set_settings", "vm_status"):
+            self.assertIn(f'"{cmd}"', app, f"frontend does not call {cmd}")
+        self.assertIn('from "@/tauri"', app)
 
     def test_config_is_single_nsis_installer(self):
         conf = read("crates/phantom-app/tauri.conf.json")
         self.assertIn('"nsis"', conf)
         self.assertIn('"frontendDist": "frontend"', conf)
+        self.assertIn("beforeBuildCommand", conf)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,9 @@ dist/
 python/phantom_pb2.py
 python/phantom_pb2_grpc.py
 
+# Node (desktop GUI frontend)
+frontend-src/node_modules/
+
 # Phantom runtime
 .phantom/
 *.log
