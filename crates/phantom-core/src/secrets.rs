@@ -14,6 +14,8 @@ use crate::error::{PhantomError, Result};
 pub const API_KEY_TARGET: &str = "phantom/api_key";
 /// Credential target for the local webhook bearer token.
 pub const WEBHOOK_TOKEN_TARGET: &str = "phantom/webhook_token";
+/// Credential target for the local GUI control-plane bearer token.
+pub const CONTROL_TOKEN_TARGET: &str = "phantom/control_token";
 
 #[cfg(windows)]
 pub fn get_secret(target: &str) -> Result<Option<String>> {

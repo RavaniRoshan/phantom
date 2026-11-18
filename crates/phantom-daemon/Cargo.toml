@@ -20,6 +20,7 @@ dirs = { workspace = true }
 
 phantom-core = { path = "../phantom-core" }
 phantom-proto = { path = "../phantom-proto" }
+phantom-control = { path = "../phantom-control" }
 
 # Phase A: daemon + proactive context engine.
 axum = "0.7"

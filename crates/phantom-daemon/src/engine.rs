@@ -10,6 +10,7 @@
 //! introduces a multi-desktop pool and a concurrent Master Planner.
 
 use crate::bus::EventRx;
+use phantom_control::{ControlState, SubmitTask};
 use phantom_core::{
     queue::{QueueOutcome, TaskQueue},
     store::{AuditLog, RunRecord, RunStore},
@@ -21,7 +22,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 
 /// Run the engine loop until the bus closes.
-pub async fn run(mut rx: EventRx, cfg: Config, dry_run: bool) {
+pub async fn run(mut rx: EventRx, cfg: Config, dry_run: bool, control: Option<Arc<ControlState>>) {
     // One agent, reused across tasks. Sequential consumption means the desktop
     // backend is never shared concurrently (see Phase B for the pool).
     let mut agent: Option<Agent> = None;
@@ -64,6 +65,14 @@ pub async fn run(mut rx: EventRx, cfg: Config, dry_run: bool) {
         let task_id = format!("run-{task_seq}");
         tracing::info!("trigger -> task [{task_id}]: {task}");
 
+        if let Some(c) = &control {
+            let _ = c.submit(SubmitTask {
+                prompt: task.clone(),
+                priority: 1,
+                dedupe_key: Some(format!("trigger:{task_id}")),
+            });
+        }
+
         if let Some(s) = &store {
             let _ = s.lock().unwrap().insert_task(&RunRecord {
                 id: task_id.clone(),
@@ -97,7 +106,7 @@ pub async fn run(mut rx: EventRx, cfg: Config, dry_run: bool) {
         let task_agent = agent.as_ref().unwrap().clone();
         let task_for_run = task.clone();
         let task_handle = tokio::spawn(async move { task_agent.run(&task_for_run, etx).await });
-        drain_events(&mut erx, &shot_seq, store.as_ref(), &mut audit, &task_id).await;
+        drain_events(&mut erx, &shot_seq, store.as_ref(), &mut audit, &task_id, control.as_ref()).await;
 
         let result = match task_handle.await {
             Ok(Ok(outcome)) => {
@@ -128,6 +137,14 @@ pub async fn run(mut rx: EventRx, cfg: Config, dry_run: bool) {
                 Err(e.to_string())
             }
         };
+
+        if let Some(c) = &control {
+            let (status, summary) = match &result {
+                Ok(o) => ("done", o.clone()),
+                Err(e) => ("failed", e.clone()),
+            };
+            c.finish(&task_id, status, &summary);
+        }
 
         if let (Some(s), Ok(outcome)) = (&store, &result) {
             let _ = s.lock().unwrap().insert_task(&RunRecord {
@@ -168,6 +185,7 @@ async fn drain_events(
     store: Option<&Arc<Mutex<RunStore>>>,
     audit: &mut Option<AuditLog>,
     task_id: &str,
+    control: Option<&Arc<ControlState>>,
 ) {
     let shot_dir = std::env::var("PHANTOM_SHOT_DIR").ok().map(PathBuf::from);
     let mut step_idx = 0usize;
@@ -187,6 +205,11 @@ async fn drain_events(
                     let params_hash = format!("{:?}", a.params);
                     let _ = log.append(task_id, &name, &params_hash, &a.reasoning);
                 }
+                if let Some(c) = control {
+                    // The event carries the action, not its execution outcome;
+                    // a recorded step means the action was dispatched.
+                    c.record_step(task_id, step_idx, &name, true);
+                }
                 step_idx += 1;
             }
             AgentEvent::Thinking(c) => {
@@ -197,6 +220,9 @@ async fn drain_events(
             }
             AgentEvent::Error(e) => {
                 tracing::error!("agent error: {e}");
+                if let Some(c) = control {
+                    c.error(task_id, &e);
+                }
             }
             AgentEvent::Screenshot(bytes) => {
                 if let Some(dir) = &shot_dir {

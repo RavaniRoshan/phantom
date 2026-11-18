@@ -35,6 +35,9 @@ struct Cli {
     /// Webhook listen port (loopback only).
     #[arg(long, default_value_t = 4545)]
     port: u16,
+    /// GUI control-plane listen port (loopback only).
+    #[arg(long, default_value_t = 4546)]
+    control_port: u16,
     /// Override the watched Inbox directory.
     #[arg(long)]
     inbox: Option<PathBuf>,
@@ -92,8 +95,24 @@ async fn main() -> anyhow::Result<()> {
         webhook_shutdown,
     ));
     let watcher_task = tokio::spawn(watcher::serve(tx.clone(), inbox, watcher_shutdown));
+
+    // B1: GUI control plane. Owned by the daemon so tasks survive window close.
+    let control_token = phantom_control::load_or_create_token()?;
+    let artifacts_root = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".phantom")
+        .join("artifacts");
+    let control_state = std::sync::Arc::new(phantom_control::ControlState::new(
+        control_token,
+        artifacts_root,
+    ));
+    let control_addr: std::net::SocketAddr = format!("127.0.0.1:{}", cli.control_port)
+        .parse()
+        .expect("valid control address");
+    let control_task = tokio::spawn(phantom_control::serve(control_state.clone(), control_addr));
+
     drop(tx);
-    let engine_task = tokio::spawn(engine::run(rx, config, cli.dry_run));
+    let engine_task = tokio::spawn(engine::run(rx, config, cli.dry_run, Some(control_state)));
 
     tracing::info!(
         "phantom-daemon started (dry_run={}, mode={:?}) — ctrl_c to stop",
@@ -109,6 +128,7 @@ async fn main() -> anyhow::Result<()> {
     let _ = webhook_task.await;
     let _ = watcher_task.await;
     let _ = engine_task.await;
+    control_task.abort();
     tracing::info!("phantom-daemon stopped");
     Ok(())
 }
