@@ -32,6 +32,13 @@ class SiteTest(unittest.TestCase):
                          "github-actions-capture.mdx"):
             self.assertIn(expected, names)
 
+    def test_internal_links_use_base_without_docs_prefix(self):
+        page = read("site/pages/index.astro")
+        cfg = read("site/blume.config.ts")
+        self.assertNotIn('href="/docs/', page)
+        self.assertNotIn('href: "/docs/', cfg)
+        self.assertIn('${base}introduction', page)
+
     def test_deploy_workflow(self):
         wf = read(".github/workflows/deploy-site.yml")
         for token in ('pages: write', 'upload-pages-artifact', 'deploy-pages', 'site/dist'):

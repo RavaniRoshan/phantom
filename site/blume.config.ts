@@ -18,15 +18,15 @@ export default defineConfig({
   },
   banner: {
     content: "Private beta — computer use runs in an isolated Windows VM.",
-    link: { text: "Read the beta gates", href: "/docs/benchmarks/release-gates" },
+    link: { text: "Read the beta gates", href: "/benchmarks/release-gates" },
     dismissible: true,
     id: "beta-banner",
   },
   footer: {
     copyright: `© ${new Date().getFullYear()} Phantom`,
     links: [
-      { label: "Documentation", href: "/docs/introduction" },
-      { label: "Live capture proof", href: "/docs/benchmarks/github-actions-capture" },
+      { label: "Documentation", href: "/introduction" },
+      { label: "Live capture proof", href: "/benchmarks/github-actions-capture" },
       { label: "GitHub", href: "https://github.com/RavaniRoshan/phantom" },
     ],
   },
