@@ -163,3 +163,92 @@ Screens:
 ## Immediate next action
 
 Apply the 14 verification corrections to ADR-009/010/011 (B0.1), then run **B0.3 guest-agent spike before B0.2 GUI work** — capture is the hard gate. The real VM proof needs a Windows Pro/Enterprise host with Hyper-V; scaffolding compiles here but the non-black-frame proof must be run on your machine.
+
+---
+
+# Appendix A — Low-RAM path: free cloud Windows VM for development/CI
+
+**Added 2026-11-18** after the user reported a hard constraint: 16 GB physical RAM but only **4–5 GB usable**. Research method: 3 parallel research subagents (model `hy4-flash-free`) — cloud free tiers/credits, Windows 365 trials, and free GUI-capable CI runners. All findings are from official provider pages unless marked ◐.
+
+## A.1 Why this changes the plan
+
+A Docker Windows VM (QEMU/KVM on Docker Desktop/WSL2) needs ~4–8 GB RAM for the guest alone plus Docker/WSL overhead, which **exceeds our usable budget**. It is also `dockur/windows`/WAA-style tooling the end user will never install. Conclusion: **drop local Docker-Windows from the critical path**; use a free cloud Windows VM for guest-agent development and live golden-task runs, and keep the local machine for code, compilation and the Tauri/control-plane work (which fit in 4–5 GB). This supersedes the Docker suggestion in the earlier chat — it was a valid CI pattern but is not viable on this machine.
+
+## A.2 Confirmed free-platform shortlist (ranked)
+
+1. **Azure Free Account — best overall.** $200 credit for 30 days **plus 750 hrs/month of B2ats v2 (2 vCPU / 8 GB AMD x86 Windows) for 12 months** — effectively one Windows VM 24/7 for a year. Windows Server 2019/2022/2025 with Desktop Experience + RDP is first-class. Signup: phone + non-prepaid card + Microsoft/GitHub account, temporary $1 hold, one free account per new customer. After the credit/12 months: convert to pay-as-you-go or services stop. B2ats v2 Windows ≈ $0.0186/hr (East US). https://azure.microsoft.com/en-us/free/ · https://prices.azure.com/api/retail/prices
+2. **Windows 365 Business trial — purpose-built, but 30 days.** 2 vCPU / 8 GB / 128 GB, **card required, auto-converts to paid at $36/user/month**, cannot be extended, data deleted if not converted. Real Windows 11, Win32 app installs, optional Intune, can enable local admin; thin HTML5 client at `windows.cloud.microsoft` keeps local RAM low. Constraints: hibernates after >1 h idle; “one per customer” likely but not stated on public pages ◐; acceptable-use concerns for a VNC server inside the guest ◐. **Windows 365 for Agents has no free tier** ($0.40/VM/hr + $5/VM/month always-available, US). https://www.microsoft.com/en-us/windows-365/business/windows-365-free-trial · https://learn.microsoft.com/en-us/windows-365/agents/pricing-paygo-always-available
+3. **AWS Free Tier (new signups).** $100 immediate + up to $100 earned via activities, valid 6 months; no payment method required for most; Windows EC2 licensing billed separately (~$0.125/hr t3.large); resources lost at expiry with a 90-day recovery window. https://aws.amazon.com/free/
+4. **Oracle Cloud Free Tier.** $300 trial credit / 30 days, card required, capacity errors common; **no usable free-forever Windows x86** (always-free AMD is 1 GB; Ampere ARM can't run Windows x86). https://www.oracle.com/cloud/free/
+5. **Kamatera 30-day trial.** Up to $100 of any single server config, full platform access, card required, Windows + RDP (licensing add-on). Clean "full desktop now" alternative. https://www.kamatera.com/free-trial/
+6. **Alibaba Cloud.** $90 credits / 3 months + 2C4G ECS 1-month trial; phone + card; company verification for enterprise offers. https://www.alibabacloud.com/free
+7. **Google Cloud — blocked for our use.** $300 / 90 days, but **Windows Server VM images cannot be created while the billing account is a Free Trial** — must upgrade to paid billing first. https://cloud.google.com/free/docs/gcp-free-tier/#free-trial
+8. **Hetzner / OVH — not viable:** no free trial credit; Hetzner Linux-only.
+
+**Free-forever Windows x86 with a usable GUI: none.** The only long path is Azure's 750 hrs/month for 12 months.
+
+## A.3 Free CI GUI runners for the 20-task golden suite
+
+- **GitHub Actions `windows-2022` / pinned x64 `windows-latest` — primary.** Microsoft's runner-image maintainer confirms a genuinely interactive desktop (`UserInteractive=True`, `WinSta0`) on x64 x64 runners; WinAppDriver, Selenium and browsers are preinstalled; desktop screenshots as artifacts are proven. Free/unlimited for public repos; 6 h/job, 20 concurrent on Free. **Everything must run inside the workflow** — no inbound RDP; the reverse-RDP workaround repo was disabled by GitHub for a ToS violation. Pin the image and avoid `windows-11-arm` (OOBE/WSL/Start-menu popups steal foreground). https://github.com/actions/runner-images/issues/14049 · https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+- **AppVeyor free OSS — for live watch/drive via RDP.** Documented RDP into the build worker, full admin, fresh VM; hard **60-minute job cap**, 1 concurrent job, 14-day no-card trial. https://www.appveyor.com/docs/how-to/rdp-to-build-worker/
+- **Cannot work:** Azure Pipelines Microsoft-hosted ("visible UI testing not supported", no remote connect); AWS CodeBuild managed Windows (Server Core, no desktop); any external RDP into GitHub-hosted VMs (unsupported/ToS). https://learn.microsoft.com/en-us/azure/devops/pipelines/test/ui-testing-considerations · https://docs.aws.amazon.com/codebuild/latest/userguide/ec2-compute-images.html
+- **CircleCI** has a `windows-server-2022-gui` machine image but no documented interactive-session guarantee or live view — proof-of-concept only ◐.
+
+## A.4 Signup wall checklist (user action — I cannot do these)
+
+- [ ] **Azure Free Account**: card (non-prepaid) + phone + Microsoft/GitHub account. Deploy `B2ats v2` Windows Server 2022 in an allowed region; confirm 8 GB RAM in portal; set auto-shutdown to avoid idle burn. **Prefer this.**
+- [ ] **GitHub repo public** (or paid plan) for free unlimited `windows-2022` CI minutes; no card needed for public use.
+- [ ] **Windows 365 trial** (optional, 30 days): Microsoft 365 tenant + card; set Day-27 cancellation reminder (auto-converts); enable local admin; plan to copy artifacts out before expiry.
+- [ ] **Fallbacks only if Azure blocked**: AWS free tier (card may be requested), Kamatera (card), Oracle (card + capacity), Alibaba (phone + card).
+- [ ] **If academic email available**: Azure for Students $100 credit, **no card**. https://azure.microsoft.com/en-us/free/students/
+- [ ] **Signing (unchanged, B0.4)**: SignPath Foundation eligibility (free OSS) and Azure Artifact Signing eligibility (individual Public Trust US/Canada only) — check country/account type now.
+
+## A.5 Revised workflow (how we actually work with this constraint)
+
+**Local machine (4–5 GB usable):**
+1. Write all code: `phantom-control`, Tauri UI, `phantom-vm` backends, `phantom-guest` source, tests.
+2. Build/verify the **portable** Rust crates and Python tests: `scripts/verify-all.ps1` (cargo check, Rust tests, golden harness, Python tests) — no GUI VM needed.
+3. Use Tauri **dev** mode for UI layout against mocked control-plane events; no live VM.
+4. Commit per unit; keep CI green.
+
+**Azure cloud VM (guest-agent proof + live runs):**
+5. Deploy one B2ats v2 Windows Server 2022 VM; RDP with a thin client (guacamole/mstsc) — all heavy work is remote.
+6. Enable autologon, install the built `phantom-guest`, run as a **per-user logon autostart** (never a service / Session 0).
+7. Run B0.3: capture WGC → GDI fallback; verify non-black PNG + click inside the VM across 3 runs; record screenshot + logs.
+8. Run the live desktop golden suite (20 tasks) remotely; measure latency/RAM.
+
+**GitHub Actions (repeatable CI):**
+9. Add a `windows-2022` job that runs the 20-task golden suite **inside the workflow** against a mock/prebuilt guest; pin the image; upload screenshots as artifacts. No local RAM cost.
+10. Only use AppVeyor if a human must watch/drive via RDP (60-min cap).
+
+**End-user beta (unchanged):** Hyper-V on the user's own Pro/Enterprise machine, or Windows 365 for users without Hyper-V ($36/user/mo) — the cloud VM is a **development/test tool**, not the shipped runtime.
+
+## A.6 Decision log — everything returned, so nothing gets forgotten
+
+| Topic | Returned finding | Where recorded |
+|---|---|---|
+| Local Docker Windows VM | Proven pattern (WAA/OSWorld) but needs 4–8 GB + Docker overhead → **rejected on RAM grounds**, superseded by cloud VM | §A.1 |
+| Azure free | Best free path: 750 h/mo B2ats v2 Windows 12 months + $200/30 d | §A.2 #1 |
+| Windows 365 trial | 30 d, 2vCPU/8GB, card, auto-converts, hibernates, local admin + Intune feasible, thin web client | §A.2 #2 |
+| W365 for Agents | No free tier; $0.40/VM/h + $5/VM/mo; purpose-built MCP + screenshare | §A.2 #2 |
+| AWS | $200/6 mo, Windows license extra | §A.2 #3 |
+| Oracle | $300/30 d, no capacity guarantee, no free-forever Windows x86 | §A.2 #4 |
+| Kamatera | $100/30 d any config, card | §A.2 #5 |
+| Alibaba | $90/3 mo + 2C4G trial | §A.2 #6 |
+| Google | Windows blocked on free trial until paid billing | §A.2 #7 |
+| Hetzner/OVH | Not viable | §A.2 #8 |
+| GitHub Actions | `windows-2022` interactive WinSta0, free, 6 h, no inbound RDP; pin image, avoid ARM | §A.3 |
+| AppVeyor | Live RDP, 60-min cap | §A.3 |
+| Azure Pipelines / CodeBuild | Cannot do headful GUI | §A.3 |
+| Signing | SignPath free first; Artifact Signing $9.99/mo US/Canada individuals; no EV; Tauri NSIS, no MSIX | B5 + ADR-012 |
+| Capture | WGC → GDI; DDA optional; interactive session only; coords desktop vs browser split | ADR-010 |
+| Compliance | Local-by-default screenshots, consent, notices, VDP, EULA | B3/B5 |
+| Verifier | 14 issues resolved, appendix in research report | research/phantom-beta-readiness.md |
+
+## A.7 Updated immediate next action
+
+1. **You complete the Azure signup** (§A.4) — this is the only external blocker; I cannot do signups or enter card/phone details.
+2. In parallel I scaffold locally: `phantom-control` crate, `phantom-guest` WGC→GDI capture module with an abstraction over the live VM, and the `windows-2022` CI golden job.
+3. Once the Azure VM exists, run B0.3 on it. If capture fails there too, we re-scope again before any GUI feature work.
+
+**Honest note:** no free service removes the need for a real Windows interactive session — it just moves it off your 4–5 GB machine. Azure's 12-month free Windows VM is the best available way to get one.
