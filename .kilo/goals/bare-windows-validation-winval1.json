@@ -1,0 +1,39 @@
+{
+  "id": "winval1",
+  "slug": "bare-windows-validation-winval1",
+  "objective": "Run Phantom's real end-to-end loop on the user's bare Windows 11 Home machine with the mock provider: install Python deps, generate proto stubs, run the gRPC service, submit tasks through the daemon control plane, prove live desktop capture/input, exercise the browser backend, run a scaled soak, and record honest gate evidence.",
+  "status": "active",
+  "branch": "goal/bare-windows-validation-winval1",
+  "scope": "whole repository (Windows-first Rust + Python agent)",
+  "scope_lock": ["crates/", "python/", "proto/", "docs/", "research/", "scripts/"],
+  "scope_flex": [".kilo/", ".github/"],
+  "criteria": [
+    {"label": "Python sidecar answers DecideAction with mock provider", "check": "python -m unittest python.tests.test_local_grpc_service -v", "must_pass": true},
+    {"label": "Daemon control plane completes a task end-to-end locally", "check": "python -m unittest python.tests.test_local_task_loop -v", "must_pass": true, "coverage_gate": true},
+    {"label": "Live bare-Windows capture is a non-black PNG", "check": "python -m unittest python.tests.test_local_capture -v", "must_pass": true},
+    {"label": "Browser backend launches Edge and navigates", "check": "cargo test -p phantom-browser -- --nocapture", "must_pass": true},
+    {"label": "Local verification remains green", "check": "powershell -NoProfile -File scripts/verify-all.ps1", "must_pass": true},
+    {"label": "Gate report records real local evidence and honest blockers", "check": "python -m unittest python.tests.test_local_gate_evidence -v", "must_pass": true}
+  ],
+  "tasks": [
+    {"id": 1, "desc": "Create goal/branch, inspect environment, record Windows 11 Home / Hyper-V constraint.", "status": "done"},
+    {"id": 2, "desc": "DONE: installed grpcio/grpcio-tools/pydantic, generated proto stubs, 2 mock DecideAction tests pass.", "status": "done"},
+    {"id": 3, "desc": "DONE: built binaries; fixed control→engine wiring (no feedback loop, matching task IDs); local task reaches done in ~1s.", "status": "done"},
+    {"id": 4, "desc": "Live bare-Windows capture test with phantom-guest in the interactive session; save non-black PNG evidence.", "status": "todo"},
+    {"id": 5, "desc": "Browser backend smoke test with local Edge; record result.", "status": "todo"},
+    {"id": 6, "desc": "Scaled local soak with mock provider (200 tasks where feasible), measure process/memory stability.", "status": "todo"},
+    {"id": 7, "desc": "Update release-gates with local evidence; mark truly blocked items; commit per unit.", "status": "todo"}
+  ],
+  "current_task": 2,
+  "iterations": 1,
+  "budget_used": 0,
+  "max_iterations": 50,
+  "negative_knowledge": [
+    "Windows 11 Home: Hyper-V and Windows Sandbox are unavailable; production VM isolation cannot be tested locally. Bare-Windows tests exercise the agent loop and capture in the user's real session, which is NOT the shipped isolation boundary.",
+    "Python 3.14.7 lacks grpc, pydantic, PIL, pytest. pip is available; dependencies must be installed before the sidecar can run.",
+    "Only Microsoft Edge is installed locally (no Chrome); chromiumoxide needs PHANTOM_CHROME or a Chrome path to launch a browser."
+  ],
+  "context_summary": "User authorized running the remaining gates on their bare Windows machine. Environment: Windows 11 Home, 16GB RAM (~6GB free), Rust 1.100 available via bootstrap toolchain, Edge installed, Python 3.14.7 without gRPC deps. Goal created; branch goal/bare-windows-validation-winval1. GUI popups are authorized for this validation." ,
+  "created_at": "2026-11-18T13:00:00Z",
+  "updated_at": "2026-11-18T13:00:00Z"
+}

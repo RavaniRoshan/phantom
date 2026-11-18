@@ -10,6 +10,7 @@
 //! introduces a multi-desktop pool and a concurrent Master Planner.
 
 use crate::bus::EventRx;
+use crate::event::PhantomEvent;
 use phantom_control::{ControlState, SubmitTask};
 use phantom_core::{
     queue::{QueueOutcome, TaskQueue},
@@ -53,6 +54,10 @@ pub async fn run(mut rx: EventRx, cfg: Config, dry_run: bool, control: Option<Ar
     let mut task_seq = 0u64;
 
     while let Some(ev) = rx.recv().await {
+        let control_id = match &ev {
+            PhantomEvent::Control { id, .. } => Some(id.clone()),
+            _ => None,
+        };
         let prompt = ev.to_task_prompt();
         // Dedupe identical triggers; priority 1, prompt as the dedupe key.
         if queue.enqueue(prompt.clone(), 1, Some(prompt.clone())) == QueueOutcome::Duplicate {
@@ -62,15 +67,20 @@ pub async fn run(mut rx: EventRx, cfg: Config, dry_run: bool, control: Option<Ar
         let Some(task) = queue.pop() else { continue };
         let task = task.prompt;
         task_seq += 1;
-        let task_id = format!("run-{task_seq}");
+        let from_gui = control_id.is_some();
+        let task_id = control_id.unwrap_or_else(|| format!("run-{task_seq}"));
         tracing::info!("trigger -> task [{task_id}]: {task}");
 
-        if let Some(c) = &control {
-            let _ = c.submit(SubmitTask {
-                prompt: task.clone(),
-                priority: 1,
-                dedupe_key: Some(format!("trigger:{task_id}")),
-            });
+        // GUI tasks are already recorded by the control API; recording them here
+        // again would duplicate the record. External triggers still get one.
+        if !from_gui {
+            if let Some(c) = &control {
+                let _ = c.record_task(SubmitTask {
+                    prompt: task.clone(),
+                    priority: 1,
+                    dedupe_key: Some(format!("trigger:{task_id}")),
+                });
+            }
         }
 
         if let Some(s) = &store {

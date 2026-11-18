@@ -106,6 +106,18 @@ async fn main() -> anyhow::Result<()> {
         control_token,
         artifacts_root,
     ));
+    // Bridge GUI submissions into the same event bus as webhook/file triggers.
+    let (gui_tx, mut gui_rx) = tokio::sync::mpsc::unbounded_channel::<(String, String)>();
+    control_state.set_task_sender(gui_tx);
+    let bridge_tx = tx.clone();
+    let gui_bridge = tokio::spawn(async move {
+        while let Some((id, prompt)) = gui_rx.recv().await {
+            let event = event::PhantomEvent::Control { id, prompt };
+            if bridge_tx.send(event).await.is_err() {
+                break;
+            }
+        }
+    });
     let control_addr: std::net::SocketAddr = format!("127.0.0.1:{}", cli.control_port)
         .parse()
         .expect("valid control address");
@@ -129,6 +141,7 @@ async fn main() -> anyhow::Result<()> {
     let _ = watcher_task.await;
     let _ = engine_task.await;
     control_task.abort();
+    gui_bridge.abort();
     tracing::info!("phantom-daemon stopped");
     Ok(())
 }
