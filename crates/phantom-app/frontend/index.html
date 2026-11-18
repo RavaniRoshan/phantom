@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Phantom</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">Phantom</div>
+      <div id="vm-pill" class="pill">VM: connecting…</div>
+    </header>
+
+    <main>
+      <section id="composer">
+        <h1>What should Phantom do?</h1>
+        <textarea id="prompt" rows="3" placeholder="e.g. Open Notepad and write a short release note"></textarea>
+        <div class="row">
+          <select id="mode"><option value="safe">Ask before consequential actions</option><option value="hero">Full VM access</option></select>
+          <button id="run">Start task</button>
+        </div>
+      </section>
+
+      <section id="activity">
+        <h2>Live activity</h2>
+        <div id="frame" class="frame">No VM frame yet. The agent view streams here when a task runs.</div>
+        <ol id="timeline"></ol>
+        <div class="row">
+          <button id="stop" disabled>Stop task</button>
+          <button id="takeover" disabled>Take over VM</button>
+        </div>
+      </section>
+
+      <section id="tasks">
+        <h2>Tasks</h2>
+        <div id="task-list"></div>
+      </section>
+
+      <section id="settings" hidden>
+        <h2>Settings</h2>
+        <label>Provider <input id="provider" value="gemini" /></label>
+        <label>Model <input id="model" placeholder="default" /></label>
+        <button id="save-settings">Save</button>
+      </section>
+    </main>
+
+    <div id="approval" class="modal" hidden>
+      <div class="modal-card">
+        <h3 id="approval-title">Approve action?</h3>
+        <p id="approval-body"></p>
+        <div class="row">
+          <button id="approve">Approve</button>
+          <button id="reject">Deny</button>
+        </div>
+      </div>
+    </div>
+
+    <nav>
+      <button data-view="tasks">Tasks</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+
+    <script src="app.js"></script>
+  </body>
+</html>
