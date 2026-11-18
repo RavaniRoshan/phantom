@@ -451,7 +451,9 @@ impl App {
             1 => self.config.mode.to_string(),
             2 => self.config.model.clone(),
             3 => self.config.llm_endpoint.clone(),
-            4 => self.config.api_key.clone(),
+            // W0.9: the API key lives in Credential Manager, never in config.
+            // Seed the edit buffer empty so a fresh value replaces it.
+            4 => String::new(),
             5 => self.config.grpc_endpoint.clone(),
             6 => self.config.max_iterations.to_string(),
             7 => self
@@ -477,7 +479,16 @@ impl App {
             },
             2 => self.config.model = v,
             3 => self.config.llm_endpoint = v,
-            4 => self.config.api_key = v,
+            4 => {
+                // W0.9: write to the OS credential store, not config.toml.
+                match phantom_core::secrets::set_secret(
+                    phantom_core::secrets::API_KEY_TARGET,
+                    &v,
+                ) {
+                    Ok(()) => self.push(Msg::System("API key stored in Credential Manager".into())),
+                    Err(e) => self.push(Msg::Error(format!("could not store API key: {e}"))),
+                }
+            }
             5 => self.config.grpc_endpoint = v,
             6 => match v.parse::<u32>() {
                 Ok(n) if n > 0 => self.config.max_iterations = n,

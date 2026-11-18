@@ -81,7 +81,16 @@ async fn main() -> anyhow::Result<()> {
     // dropped immediately so the ONLY senders are the two producer tasks —
     // when they exit on shutdown, the bus closes and the engine's recv() ends
     // (holding the last tx in main would deadlock the engine).
-    let webhook_task = tokio::spawn(webhook::serve(tx.clone(), cli.port, webhook_shutdown));
+    // W0.8: every trigger must present this per-install bearer token. The
+    // token itself is never logged; it lives in the OS credential store.
+    let webhook_token = webhook::load_or_create_token()?;
+    tracing::info!("webhook bearer token loaded from secret store (not logged)");
+    let webhook_task = tokio::spawn(webhook::serve(
+        tx.clone(),
+        cli.port,
+        webhook_token,
+        webhook_shutdown,
+    ));
     let watcher_task = tokio::spawn(watcher::serve(tx.clone(), inbox, watcher_shutdown));
     drop(tx);
     let engine_task = tokio::spawn(engine::run(rx, config, cli.dry_run));

@@ -20,6 +20,7 @@ import phantom_pb2_grpc
 from .providers import build_provider
 from .providers.base import DecideRequest, PlanRequest
 from .schema import normalize_action_dict, normalize_plan_dict
+from .secrets import get_api_key
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("phantom.llm")
@@ -38,14 +39,18 @@ def load_config() -> dict:
         with open(path, "rb") as f:
             data = tomllib.load(f)
         for k in cfg:
+            # W0.9: never read api_key from config.toml — secrets live in the
+            # OS credential store (or the PHANTOM_API_KEY env override).
+            if k == "api_key":
+                continue
             if k in data and data[k]:
                 cfg[k] = data[k]
     except FileNotFoundError:
         pass
     cfg["provider"] = os.environ.get("PHANTOM_PROVIDER", cfg["provider"])
-    cfg["api_key"] = os.environ.get("PHANTOM_API_KEY", cfg["api_key"])
     cfg["endpoint"] = os.environ.get("PHANTOM_LLM_ENDPOINT", cfg["endpoint"])
     cfg["model"] = os.environ.get("PHANTOM_MODEL", cfg["model"])
+    cfg["api_key"] = get_api_key() or ""
     return cfg
 
 

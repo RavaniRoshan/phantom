@@ -9,6 +9,7 @@ pub mod config;
 pub mod error;
 pub mod orchestrator;
 pub mod router;
+pub mod secrets;
 pub mod security;
 pub mod stream;
 pub mod task;

@@ -26,6 +26,10 @@ dirs.workspace = true
 tracing.workspace = true
 futures.workspace = true
 
+# W0.9: Windows Credential Manager for secrets (compiles to a no-op off-Windows).
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_Security_Credentials"] }
+
 [dev-dependencies]
 tracing-subscriber.workspace = true
 

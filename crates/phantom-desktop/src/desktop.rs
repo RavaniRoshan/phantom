@@ -30,7 +30,7 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, FindWindowExW, GetClientRect, GetForegroundWindow, IsWindowVisible, PostMessageW,
-    SetForegroundWindow, ShowWindow, SW_RESTORE, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    SetForegroundWindow, ShowWindow, SW_RESTORE, SW_SHOWNORMAL, WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
 use crate::input;
 
@@ -109,15 +109,41 @@ impl VirtualDesktop {
         &self.name
     }
 
-    /// Open `target` on the hidden desktop. URLs are opened in the default
-    /// browser; anything else is treated as a command line.
+    /// Open `target` on the hidden desktop (W0.7).
+    ///
+    /// The old implementation built `cmd.exe /c start {target}`, which let a
+    /// model-controlled target inject arbitrary shell commands. We now call
+    /// `ShellExecuteW` directly: URLs open in the default browser, app names
+    /// launch as executables, and the target is never parsed by a shell.
+    /// Safe-mode allowlisting happens in `phantom_core::Security` before this
+    /// method is reached.
     pub async fn open(&self, target: &str) -> Result<()> {
-        let cmd = if target.starts_with("http://") || target.starts_with("https://") {
-            format!("cmd.exe /c start {}", target)
-        } else {
-            target.to_string()
+        // Input injection on another desktop requires the calling thread to be
+        // bound to it (this is a no-op if already bound).
+        unsafe {
+            let _ = SetThreadDesktop(self.handle);
+        }
+        let verb = to_wide_owned("open");
+        let file = to_wide_owned(target);
+        let empty: Vec<u16> = vec![0];
+        // SAFETY: every wide buffer outlives the call; ShellExecuteW copies
+        // what it needs. HWND::default() means "no owner window".
+        let result = unsafe {
+            windows::Win32::UI::Shell::ShellExecuteW(
+                HWND::default(),
+                windows::core::PCWSTR(verb.as_ptr()),
+                windows::core::PCWSTR(file.as_ptr()),
+                windows::core::PCWSTR(empty.as_ptr()),
+                windows::core::PCWSTR(empty.as_ptr()),
+                SW_SHOWNORMAL,
+            )
         };
-        spawn_on_desktop("cmd.exe", &format!("/c {}", cmd), &desktop_path_for(&self.name))?;
+        let code = result.0 as isize;
+        if code <= 32 {
+            return Err(anyhow!(
+                "ShellExecuteW failed for '{target}' (code {code})"
+            ));
+        }
         Ok(())
     }
 
