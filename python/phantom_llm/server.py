@@ -72,11 +72,19 @@ class PhantomLLMServicer(phantom_pb2_grpc.PhantomLLMServicer):
     def __init__(self, provider, cfg: dict | None = None):
         self.provider = provider
         self.cfg = cfg or {}
+        # The injected provider is the default when a request omits `provider`
+        # (e.g. the offline mock used by end-to-end tests).
+        self.default_name = type(provider).__name__.removesuffix("Provider").lower()
         self._providers: dict[tuple[str, str, str], object] = {}
 
     def _provider_for(self, request):
         """B3: per-request provider/model/key_ref, cached by (provider, model, ref)."""
-        name = (getattr(request, "provider", "") or self.cfg.get("provider") or "claude").strip().lower()
+        name = (
+            getattr(request, "provider", "")
+            or self.cfg.get("provider")
+            or self.default_name
+            or "claude"
+        ).strip().lower()
         model = (getattr(request, "model", "") or self.cfg.get("model") or "").strip() or None
         key_ref = (getattr(request, "key_ref", "") or "").strip()
         from .provider_config import resolve_key
