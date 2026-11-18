@@ -60,6 +60,36 @@ pub fn all_passed(results: &[CriterionResult]) -> bool {
     !results.is_empty() && results.iter().all(|r| r.passed)
 }
 
+/// Human-readable summary of failed criteria (used in the agent's re-plan loop).
+pub fn failure_detail(results: &[CriterionResult]) -> String {
+    results
+        .iter()
+        .filter(|r| !r.passed)
+        .map(|r| r.detail.clone())
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+#[cfg(test)]
+mod detail_tests {
+    use super::*;
+
+    #[test]
+    fn failure_detail_lists_only_failures() {
+        let root = std::env::temp_dir();
+        let r = verify(
+            &[
+                Criterion::OutputContains { output: "ok".into(), text: "ok".into() },
+                Criterion::OutputContains { output: "ok".into(), text: "missing".into() },
+            ],
+            &root,
+        );
+        let d = failure_detail(&r);
+        assert!(d.contains("lacks"));
+        assert!(!d.contains("contains"));
+    }
+}
+
 /// W7.3: bounded re-planning budget. Returns whether another attempt is allowed.
 pub fn can_replan(attempt: u32, max_attempts: u32) -> bool {
     max_attempts > 0 && attempt < max_attempts

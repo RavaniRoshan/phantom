@@ -61,6 +61,10 @@ pub struct Agent {
     approval: Option<ApprovalQueue>,
     /// W0.10: cooperative cancellation shared with backends (shell commands).
     cancel: CancellationToken,
+    /// W7.1/7.2: explicit, checkable criteria verified before `done`.
+    verification: Vec<crate::verify::Criterion>,
+    /// Root against which relative artifact criteria are resolved.
+    verification_root: std::path::PathBuf,
 }
 
 impl Agent {
@@ -76,7 +80,19 @@ impl Agent {
             desktop_name: "PhantomDesktop".to_string(),
             approval: None,
             cancel: CancellationToken::new(),
+            verification: Vec::new(),
+            verification_root: std::env::temp_dir().join("phantom-work"),
         }
+    }
+
+    /// Attach explicit success criteria (W7.1). `done` is only emitted when
+    /// every criterion passes; otherwise the loop re-plans within budget.
+    pub fn set_verification(&mut self, criteria: Vec<crate::verify::Criterion>) {
+        self.verification = criteria;
+    }
+
+    pub fn set_verification_root(&mut self, root: impl Into<std::path::PathBuf>) {
+        self.verification_root = root.into();
     }
 
     /// Cancel the running task. Honoured at the next await point (< 2 s).
@@ -143,6 +159,7 @@ impl Agent {
         let mut last_screenshot: Option<Vec<u8>> = None;
         let mut last_context = String::new();
         let mut iterations = 0u32;
+        let mut replans = 0u32;
 
         loop {
             if self.cancel.is_cancelled() {
@@ -269,6 +286,29 @@ impl Agent {
             }
 
             if action.action_type == "done" {
+                // W7.2: never trust a bare `done` when criteria were supplied.
+                if !self.verification.is_empty() {
+                    let results = crate::verify::verify(&self.verification, &self.verification_root);
+                    if !crate::verify::all_passed(&results) {
+                        let detail = crate::verify::failure_detail(&results);
+                        tx.send(AgentEvent::Error(format!("verification failed: {detail}")))
+                            .await
+                            .ok();
+                        history.push((
+                            "verify/failed".to_string(),
+                            detail.clone(),
+                            false,
+                        ));
+                        if crate::verify::can_replan(replans, self.config.max_replans) {
+                            replans += 1;
+                            last_context = format!("verification failed: {detail} — re-plan");
+                            continue;
+                        }
+                        return Err(anyhow::anyhow!(
+                            "verification failed after {replans} re-plan(s): {detail}"
+                        ));
+                    }
+                }
                 tx.send(AgentEvent::Result(action.reasoning.clone())).await.ok();
                 return Ok(RunOutcome::Completed {
                     summary: action.reasoning.clone(),

@@ -37,7 +37,7 @@ class FailurePropagationTest(unittest.TestCase):
         self.assertIn("Ok(Err(e)) =>", engine)
         self.assertIn("task failed: {e}", engine)
         # The run future must be spawned so it is actually polled.
-        self.assertIn("tokio::spawn(async move { task_agent.run(&task, etx).await })", engine)
+        self.assertIn("tokio::spawn(async move { task_agent.run(&task_for_run, etx).await })", engine)
 
     def test_client_retries_invalid_argument_once(self):
         client = _read("crates/phantom-core/src/client.rs")

@@ -69,6 +69,8 @@ pub struct Config {
     pub step_timeout_secs: u64,
     /// Maximum bytes of command output returned to the model (W0.10).
     pub max_output_bytes: usize,
+    /// Bounded re-plan attempts after a failed verification (W7.3).
+    pub max_replans: u32,
 }
 
 impl Default for Config {
@@ -86,6 +88,7 @@ impl Default for Config {
             confidence_gate: 0.70,
             step_timeout_secs: 30,
             max_output_bytes: 64 * 1024,
+            max_replans: 2,
         }
     }
 }
@@ -181,6 +184,7 @@ impl Config {
         if self.max_output_bytes == 0 {
             self.max_output_bytes = 64 * 1024;
         }
+        // Zero is a valid "no re-plan" policy, so no normalization here.
         // Clamp the autonomy gate into [0, 1]; out-of-range means "disabled".
         if !self.confidence_gate.is_finite() {
             self.confidence_gate = 0.0;
