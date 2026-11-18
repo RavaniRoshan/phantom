@@ -49,6 +49,26 @@ npm run build
 `src/index.css` holds the full Space UI token set from `lib-style.json`; the
 shadcn CLI may append small per-component token patches, which is expected.
 
+## Configuration is app-only
+
+The Settings screen owns every user-facing control. The CLI and CI read the
+same `~/.phantom/config.toml` but never present these controls to end users.
+
+- **Provider** — chosen from a catalog in `src/models.ts` (Claude, OpenAI,
+  Gemini, NVIDIA NIM, OpenRouter, Ollama, local, offline mock).
+- **Model** — picked from the selected provider's catalog, or entered as a
+  custom model ID. Catalog entries are labelled (e.g. "vision", "fast").
+- **Endpoint URL** — shown for providers that need one (Ollama, local,
+  OpenRouter).
+- **Mode / max iterations / confidence gate / parallel workers** — saved to
+  the same config the daemon uses.
+- **API key** — saved to / cleared from Windows Credential Manager. The value
+  is never written to `config.toml` or logs; `phantom_llm` resolves it per
+  request, so a key saved after startup takes effect immediately.
+
+`save_app_settings` persists to `config.toml` and mirrors the control-plane
+copy; `get_app_settings` reads it back. `delete_api_key` clears the credential.
+
 ## Tauri IPC contract
 
 `src/tauri.ts` exposes `invoke<T>(cmd, args)`. It prefers Tauri v2's
@@ -63,7 +83,9 @@ The GUI calls exactly the commands the Rust shell registers:
 | `submit_task` | start a task from the composer |
 | `cancel_task` | stop a task |
 | `resolve_approval` | approve/deny a consequential action |
-| `get_settings` / `set_settings` | load and save provider/model/mode |
+| `get_settings` / `set_settings` | control-plane mirror of provider/model/mode |
+| `get_app_settings` / `save_app_settings` | load/save the full app config |
+| `has_api_key` / `set_api_key` / `delete_api_key` | first-run key management |
 | `vm_status` | VM backend/state badge |
 
 ## Verification

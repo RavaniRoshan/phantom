@@ -126,7 +126,7 @@ phantom/
 ├── Cargo.toml                # workspace (Windows-first; cross-platform crates type-check elsewhere)
 ├── proto/phantom.proto       # shared gRPC contract (DecideAction / PlanTask / StreamThinking)
 ├── crates/
-│   ├── phantom-cli/          # ratatui TUI ("phantom" binary: settings, chat, status, slash cmds)
+│   ├── phantom-cli/          # internal developer CLI (not an end-user surface)
 │   ├── phantom-core/         # OmniAgent, router, config, security, ApprovalQueue, orchestrator (swarm)
 │   │   └── examples/         # swarm_task.rs — drives the Master Planner
 │   ├── phantom-browser/      # chromiumoxide CDP backend (headless)
@@ -186,7 +186,12 @@ API key in Windows Credential Manager.
 
 ## Usage
 
-### Interactive TUI
+> **End users operate the installed Windows app only.** Settings, API keys, the
+> provider/model catalog and every other configuration control live in the
+> app's Settings screen. The CLI and CI below are internal/backend tooling and
+> are not presented to end users.
+
+### Developer CLI (internal)
 
 1. **Start the Python LLM service** (one terminal):
 

@@ -327,6 +327,9 @@ mod tests {
         assert!(safe().check_action(&file_write("/safe/report.md")).is_ok());
     }
 
+    // Desktop app allowlisting is Windows-specific; the hosted Linux runner
+    // has no notepad.exe/chrome.exe names to allow.
+    #[cfg(windows)]
     #[test]
     fn safe_allows_allowlisted_desktop_apps_and_urls() {
         for target in [
@@ -339,6 +342,16 @@ mod tests {
             assert!(
                 safe().check_action(&desktop_open(target)).is_ok(),
                 "expected Safe mode to allow desktop target: {target}"
+            );
+        }
+    }
+
+    #[test]
+    fn safe_allows_allowlisted_urls_on_any_platform() {
+        for target in ["https://example.com/path?q=1&x=2", "http://localhost:8080"] {
+            assert!(
+                safe().check_action(&desktop_open(target)).is_ok(),
+                "expected Safe mode to allow URL: {target}"
             );
         }
     }

@@ -30,11 +30,15 @@ export type VmStatus = {
 
 export type SubmitResult = { id: string }
 
-export type Settings = {
+export type AppSettings = {
   provider: string
   model: string
   mode: string
   max_iterations: number
+  llm_endpoint: string
+  confidence_gate: number
+  max_parallel_workers: number
+  key_configured: boolean
 }
 
 export type Approval = {
