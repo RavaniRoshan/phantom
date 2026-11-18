@@ -8,11 +8,11 @@ infrastructure or people not available here.
 
 | Gate | Target | Status | Evidence |
 |---|---|---|---|
-| Desktop golden tasks | 12/20 × 3 runs | ⚠️ READY, NOT RUN | `phantom-guest` + `windows-2022` capture workflow exist; live suite has not been executed (AWS launch externally blocked; CI workflow not dispatched from this environment). |
+| Desktop golden tasks | 12/20 × 3 runs | ⚠️ CAPTURE PROVEN, TASKS NOT RUN | GitHub Actions `windows-2022` run `44296179855` succeeded: live non-black 1024×768 PNG artifact verified (`github-actions-capture.md`). The 20 LLM-driven desktop tasks still need a provider key + persistent VM session. |
 | Browser golden tasks | 18/20 | ❌ BLOCKED | 20 live tasks defined; no live LLM service run. |
 | Files/CLI tasks | 20/20 | ✅ VERIFIED | `bench` runner: 20/20 deterministic pass. |
 | No silent success | 0 false `done` / 100 | ✅ VERIFIED | 100-case malformed corpus, 0 false done. |
-| Background invariant | user focus untouched | ⚠️ STRUCTURAL | Guest agent runs inside the VM interactive session; daemon owns tasks. Not validated on a real VM host here. |
+| Background invariant | user focus untouched | ⚠️ STRUCTURAL + LIVE CAPTURE | Guest agent runs inside the VM interactive session; daemon owns tasks. `windows-2022` run proved capture in an isolated hosted session; foreground isolation on a user's own machine still untested. |
 
 ## Safety gate
 
@@ -47,13 +47,15 @@ infrastructure or people not available here.
 ## Verified local state
 
 `scripts/verify-all.ps1` is green: `cargo check --workspace --all-targets`,
-**92 Rust tests**, the 20-task deterministic golden harness, and **59 Python
-stdlib tests**. Storage: `docs/benchmarks/baseline.md` and `latest.json`.
+**92 Rust tests**, the 20-task deterministic golden harness, and **61 Python
+stdlib tests**. Storage: `docs/benchmarks/baseline.md`, `latest.json`, and
+`docs/benchmarks/github-actions-capture.md` (live 1024×768 non-black capture,
+run `44296179855`, conclusion `success`).
 
 ## Conclusion
 
 **Do not ship yet.** Every code-level deliverable of B0–B6 is implemented and
-verified locally. The remaining gates require a live Windows VM, a signing
-identity, and beta users: run the `windows-gui-golden` workflow, execute the
-live desktop/browser suites, complete the soak, then obtain privacy/security
-sign-off. This report will not be marked green until those checks actually run.
+verified locally, and the GitHub Actions `windows-2022` run proved live capture
+in a real interactive desktop. The remaining gates still require the LLM-driven
+desktop/browser suites, the soak, a signing identity, and beta users. This
+report will not be marked green until those checks actually run.
