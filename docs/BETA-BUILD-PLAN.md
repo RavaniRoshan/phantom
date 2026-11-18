@@ -264,3 +264,22 @@ A follow-up verification stream checked strict no-credit-card signup. Ranked res
 5. **Card required (excluded):** standard Azure free account, Google Cloud trial, Oracle Cloud Free Tier, Kamatera, Alibaba Cloud.
 
 **Decision:** proceed with **AWS Free Tier** (user's choice). Fallbacks in order if identity verification forces a card or credits run out: GitHub Actions `windows-2022` (no card, in-workflow proof), AppVeyor (live RDP, 60 min), Azure for Students (if eligible). Signup page opened for the user at `https://signin.aws.amazon.com/signup?request_type=register`; credentials are handled by the user only.
+
+---
+
+# Appendix B — implementation record (2026-11-18, autonomous execution)
+
+**AWS outcome:** setup completed (CLI, profile `phantom`, region `ap-southeast-2`, login, Agent Toolkit, MCP profile patch, AGENTS.md rules). EC2 launch was **externally blocked**: `RunInstances` → `Blocked: This account is currently blocked and not recognized as a valid account`. Resources prepared and reusable (AMI `ami-09339485387465d79`, key pair `phantom-qa`, SG `sg-0fc855409019b1a8e`, eligible type `m7i-flex.large` — `t3.large` is NOT Free-Tier-eligible). Per the user's directive, work continued on the **GitHub Actions path** instead of waiting.
+
+| Phase | Delivered | Verification |
+|---|---|---|
+| B1 | `crates/phantom-control`: authenticated loopback API (tasks/cancel/approvals/artifacts/settings/VM status/SSE), nonce replay protection; daemon owns state | 4 Rust + 3 Python tests |
+| B2 | `crates/phantom-app`: Tauri 2 tray + composer + task list + live VM panel + approval modal + settings; thin client of control plane | 3 Python structural tests |
+| B3 | proto `provider/model/key_ref`; Python sidecar per-request provider resolution; `provider_config.py` (5 families, 6 outcomes, capability precedence, `-1` sentinel) | 6 Python tests |
+| B4 | `crates/phantom-guest` (GDI→PNG + all-black rejection + SendInput + auth HTTP API), `phantom-vm` Guest/HyperV backends, `windows-2022` capture workflow | 6 Rust + 4 Python tests |
+| B5 | NSIS config, `sign.ps1` (SignPath/Artifact/dev), release workflow, notice generator, privacy/EULA/SECURITY | 4 Python tests |
+| B6 | Honest gate audit updated in `docs/benchmarks/release-gates.md` | `verify-all.ps1`: 92 Rust + 59 Python tests, 20/20 golden |
+
+**Changed design decisions:** `apps/phantom-app` → `crates/phantom-app` (workspace auto-membership); GUI is a Tauri 2 thin client (no embedded agent); control plane is axum SSE on `127.0.0.1:4546`; capture proof lives in `.github/workflows/windows-gui-golden.yml`, driven entirely inside the workflow (no inbound RDP, no reverse tunnels).
+
+**Still external:** live desktop/browser golden suites, 8-hour soak, signed installer build (secrets), first-run user testing, privacy/security sign-off, and AWS account verification. None are marked green in the gate report.
