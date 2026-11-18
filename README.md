@@ -28,7 +28,9 @@ Windows desktop — so you keep using your machine while it runs.
 - [Requirements](#requirements)
 - [Installation & Build](#installation--build)
 - [Usage](#usage)
-  - [Interactive TUI](#interactive-tui)
+  - [Installed Windows app](#installed-windows-app)
+  - [Desktop GUI (Tauri + React + Space UI)](#desktop-gui-tauri--react--space-ui)
+  - [Developer CLI (internal)](#developer-cli-internal)
   - [Headless daemon (proactive mode)](#headless-daemon-proactive-mode)
   - [Master Planner swarm](#master-planner-swarm)
   - [Offline / mock provider](#offline--mock-provider)
@@ -50,13 +52,15 @@ a Python service (`phantom_llm`) adapts any LLM provider onto a single shared
 action schema over gRPC. Because every provider speaks the same neutral
 contract, **model behavior stays comparable and there is no vendor lock-in**.
 
-Two ways to run it:
+For end users, Phantom is an **installed Windows app**: you configure it once in
+the app, then give it tasks while it runs in the background. For developers there
+are two lower-level entry points:
 
-- **Interactive** — a terminal UI (TUI) where you type tasks, watch the plan and
-  the model's streamed reasoning, and approve uncertain steps.
+- **Desktop GUI** — the installed app's React window: task composer, live
+  activity, task list, and the only user-facing Settings screen.
 - **Headless / proactive** — the `phantom-daemon` reacts to cloud webhooks and
   dropped files on its own, running tasks in the background without a human at
-  the keyboard.
+  the keyboard. The terminal CLI is internal tooling, not an end-user surface.
 
 ## Highlights
 
@@ -82,9 +86,11 @@ Two ways to run it:
   Chrome DevTools Protocol with no visible window.
 - **Safe / Hero modes.** Safe mode restricts writes to allowed folders; Hero mode
   grants full system access with no prompts.
-- **Interactive TUI.** A `ratatui` terminal UI shows the plan, each action, the
-  streamed reasoning, and a live, editable settings form (provider, mode, model,
-  API key, endpoints, allowed folders).
+- **One user-facing app.** The installed Windows GUI owns every setting:
+  provider, model catalog, API key, mode, endpoints, autonomy and worker limits.
+  The terminal CLI and CI are internal/backend only.
+- **Background by default.** The installer registers a per-user logon task and
+  bundles the Python sidecar, so no Python, browser, or VM setup is needed.
 - **NVIDIA NIM provider (zero-cost vision).** An OpenAI-compatible adapter that
   drives free-tier vision models through Phantom's neutral schema — prove the
   whole loop on real screenshots at no cost, with no lock-in.
@@ -150,11 +156,12 @@ phantom/
 - **Python 3.11+** for the LLM service.
 - **Node 24 + npm** only when rebuilding the desktop GUI (`frontend-src/`). The
   checked-in build in `crates/phantom-app/frontend/` is ready to use as-is.
-- A **Chromium/Chrome** binary on the host (used headlessly by `phantom-browser`).
-  Snap-packaged Chromium is auto-detected via a generated `snap run` wrapper;
-  otherwise set `PHANTOM_CHROME` to the binary path.
-- A provider **API key** (Claude/OpenAI/Gemini) or a running **Ollama** instance.
-  The `mock` provider needs neither (see [Offline / mock provider](#offline--mock-provider)).
+- For browser tasks, a **Chromium/Chrome** binary (or Windows Edge/WebView2,
+  already present on Windows). Override detection with `PHANTOM_CHROME`.
+- A provider **API key** entered once in the app's Settings screen (stored in
+  Windows Credential Manager), or a local Ollama endpoint. The `mock` provider
+  needs neither (see [Offline / mock provider](#offline--mock-provider)).
+  Nothing needs to be set in a shell for the installed app.
 
 > **Platform.** Phantom is **Windows-first**. The Windows-only backends
 > (`phantom-fs` PowerShell exec, `phantom-desktop`) are gated behind
@@ -191,13 +198,31 @@ API key in Windows Credential Manager.
 > app's Settings screen. The CLI and CI below are internal/backend tooling and
 > are not presented to end users.
 
+### Installed Windows app
+
+Install Phantom, open it, and use the single Settings screen to choose a
+provider, pick a model from the catalog (or enter a custom model ID), save your
+API key, and tune mode, iterations, confidence and workers. Tasks keep running
+after the window closes; a tray icon brings the app back.
+
+```powershell
+# from a checkout, on Windows
+cargo build -p phantom-daemon -p phantom-cli -p phantom-guest -p phantom-app
+powershell -ExecutionPolicy Bypass -File scripts/install-local.ps1
+```
+
+The installer stages a self-contained Python sidecar into `%LOCALAPPDATA%\Phantom`,
+registers a per-user logon task, and starts the daemon. See
+[docs/install.md](docs/install.md) for details and caveats (the distributable
+NSIS installer is unsigned without signing secrets).
+
 ### Developer CLI (internal)
 
 1. **Start the Python LLM service** (one terminal):
 
    ```powershell
    cd python
-   $env:PHANTOM_API_KEY = "sk-..."        # or set in config
+   $env:PHANTOM_API_KEY = "sk-..."        # or store the key via the app's Settings
    python -m phantom_llm.server
    ```
 
@@ -303,15 +328,16 @@ cargo run -p phantom-cli --release
 
 ## Configuration
 
-Phantom reads `~/.phantom/config.toml` (created with defaults on first run).
-Fields:
+End users never edit configuration by hand: the app's Settings screen is the
+only place that writes it. Developers and CI read the same
+`~/.phantom/config.toml` (created with defaults on first run). Fields:
 
 | key | meaning |
 |-----|---------|
 | `provider` | `claude` \| `openai` \| `gemini` \| `ollama` \| `nvidia` \| `mock` |
 | `model` | optional model override (blank = provider default) |
 | `llm_endpoint` | base URL override (Ollama / self-hosted / NIM) |
-| `api_key` | provider key (prefer env `PHANTOM_API_KEY`) |
+| `api_key` | legacy field; keys now live in Windows Credential Manager (never written here) |
 | `mode` | `safe` (default) \| `hero` |
 | `allowed_folders` | write roots permitted in Safe mode |
 | `grpc_endpoint` | address of the Python service |
@@ -321,6 +347,10 @@ Fields:
 
 Environment overrides: `PHANTOM_API_KEY`, `PHANTOM_PROVIDER`, `PHANTOM_CHROME`,
 `PHANTOM_NVIDIA_MODEL`, `PHANTOM_NVIDIA_ENDPOINT`, `PHANTOM_SHOT_DIR`.
+
+The provider API key is stored only in Windows Credential Manager under
+`phantom/api_key`; the app's Settings screen saves and clears it, and the LLM
+service resolves it on every request. See [docs/gui-frontend.md](docs/gui-frontend.md).
 
 ## Modes: Safe & Hero
 
@@ -335,8 +365,9 @@ Every `ActionResponse` carries a `confidence` score. In **Safe mode**, an action
 the model is *less* confident about than `confidence_gate` is **paused** rather
 than executed:
 
-- **With a TUI attached** — the action is enqueued in the `ApprovalQueue` and
-  surfaced for the operator to **approve** or **reject** (resolve-all supported).
+- **With the app attached** — the action is enqueued in the `ApprovalQueue` and
+  surfaced in the GUI's approval dialog to **approve** or **reject** (resolve-all
+  supported).
 - **Headless (daemon / swarm)** — no human is available, so the uncertain action
   is **skipped** and the task continues.
 
@@ -383,9 +414,14 @@ python -m phantom_llm.server
 The bundled offline tests (`python/tests/test_nvidia_provider.py`) prove the JSON
 extraction and schema normalization without needing a key or network.
 
+> NIM retires models independently of this project: the historical default
+> `meta/llama-3.2-90b-vision-instruct` now returns HTTP 410. Pick an available
+> vision model from the app's Model catalog instead of relying on that default.
+> The live NVIDIA CI job is informational (`continue-on-error`) for this reason.
+
 ## Testing & CI
 
-Two GitHub Actions workflows gate the project:
+Three GitHub Actions workflows gate the project:
 
 - **`ci.yml`** (Linux) — `cargo check`, portable Rust crate tests
   (`phantom-fs`, `phantom-proto`, `phantom-core`), Python provider-neutrality
@@ -393,7 +429,10 @@ Two GitHub Actions workflows gate the project:
   the real Rust `agent ↔ client` loop over the `file` backend.
 - **`windows-runtime.yml`** (Windows) — compiles the real Windows-only backends
   and runs the desktop / multi-desktop-pool / NVIDIA runtime jobs on a real
-  Windows session.
+  Windows session. The NVIDIA job is informational (`continue-on-error`) because
+  NIM model availability is external.
+- **`windows-gui-golden.yml`** (Windows) — proves a live, non-black desktop
+  capture on a real `windows-2022` interactive session and uploads the PNG.
 
 Run locally:
 
@@ -407,6 +446,9 @@ pytest tests/
 
 # Full-stack Rust ↔ gRPC ↔ Python e2e (Linux; boots the mock server)
 PHANTOM_E2E=1 PHANTOM_PYTHON=python cargo test -p phantom-core --test e2e_mock -- --test-threads=1
+
+# Everything above in one local gate (Rust check/test, golden harness, Python tests)
+powershell -ExecutionPolicy Bypass -File scripts/verify-all.ps1
 ```
 
 ## Roadmap
@@ -430,7 +472,10 @@ Issues and pull requests are welcome. To build and test locally, follow
   `python/phantom_llm/schema.py`.
 - The Windows-only backends must stay gated behind `cfg(windows)`; shared crates
   must remain cross-platform-compilable.
-- Run `cargo clippy --workspace` and `pytest tests/` before opening a PR.
+- Run `scripts/verify-all.ps1` before opening a PR (and `npx tsc --noEmit` in
+  `frontend-src/` if you changed the GUI).
+- Keep all user-facing configuration in the app's Settings screen; the CLI and
+  CI are internal consumers of the config file, not configuration surfaces.
 
 ## License
 
