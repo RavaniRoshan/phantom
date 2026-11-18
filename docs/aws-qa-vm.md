@@ -80,9 +80,11 @@ aws ec2 run-instances --profile $profile --region $region `
 
 ## Status
 
-- [ ] AWS CLI v2 installed (background installer running at time of writing)
-- [ ] `aws login --region ap-southeast-2 --profile phantom` completed by user in browser
-- [ ] `aws sts get-caller-identity --profile phantom` verified
-- [ ] Agent Toolkit configured (Step 5 of setup instructions) + MCP profile patch
-- [ ] EC2 instance launched with the config above
+- [x] AWS CLI v2.41.0 installed
+- [x] `aws login --region ap-southeast-2 --profile phantom` completed by user in browser (account `176592013192`, role `AccountFullAccessRole`)
+- [x] `aws sts get-caller-identity --profile phantom` verified
+- [x] Agent Toolkit configured via `aws configure agent-toolkit --yes --region us-east-1 --profile phantom`; skills catalog verified via `list-available-skills`
+- [x] MCP config patched: `~/.config/opencode/opencode.json` → `aws-mcp.env.AWS_MCP_PROXY_PROFILES = "phantom"`
+- [x] New AWS experience rules appended to `AGENTS.md` with idempotent markers; help_level = HIGH
+- [ ] EC2 instance launched with the config above (next step)
 - [ ] RDP connected, guest agent autostart registered, B0.3 capture proof run
