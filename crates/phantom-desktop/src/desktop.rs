@@ -13,10 +13,13 @@ use anyhow::{anyhow, Result};
 use std::mem::{self, zeroed};
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
+    CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
     ReleaseDC, SelectObject, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, HBITMAP, HDC,
-    SRCCOPY,
 };
+use image::{ImageFormat, RgbImage};
+use std::io::Cursor;
+
+use crate::Image;
 use windows::Win32::Storage::Xps::{PrintWindow, PW_CLIENTONLY};
 use windows::Win32::System::StationsAndDesktops::{
     CloseDesktop, CreateDesktopW, SetThreadDesktop, DESKTOP_CONTROL_FLAGS, HDESK,
@@ -206,12 +209,12 @@ impl VirtualDesktop {
     /// desktop (byte-identical captures). A brand-new thread has a clean desktop
     /// association, so the bind takes effect and the capture is guaranteed to
     /// come from *this* desktop.
-    pub async fn screenshot(&self) -> Result<Vec<u8>> {
+    pub async fn screenshot(&self) -> Result<Image> {
         // `HDESK` is a raw pointer (not `Send`); move it across the thread
         // boundary as an integer and rebuild it on the other side. The handle is
         // a process-wide kernel object, valid from any thread.
         let raw = self.handle.0 as isize;
-        std::thread::spawn(move || -> Result<Vec<u8>> {
+        std::thread::spawn(move || -> Result<Image> {
             unsafe {
                 let handle = HDESK(raw as *mut core::ffi::c_void);
                 // Non-fatal: on the single-desktop path the process desktop is
@@ -221,7 +224,7 @@ impl VirtualDesktop {
                 if hwnd.is_invalid() {
                     return Err(anyhow!("no window to capture on hidden desktop"));
                 }
-                capture_window_bmp(hwnd)
+                capture_window_png(hwnd)
             }
         })
         .join()
@@ -279,13 +282,27 @@ fn spawn_on_desktop(app: &str, args: &str, desktop_path: &str) -> Result<PROCESS
     Ok(pi)
 }
 
-/// Capture `hwnd` to an in-memory 24-bit BMP and return the file bytes.
-unsafe fn capture_window_bmp(hwnd: HWND) -> Result<Vec<u8>> {
+/// Capture `hwnd` and encode it to PNG at the source (W0.1 / ADR-001).
+///
+/// W0.12 fixes over the previous BMP path:
+///   * `PrintWindow` is the ONLY capture route. The old `BitBlt(dst=dst)`
+///     "fallback" copied an empty offscreen surface onto itself, producing a
+///     black image that was reported as a successful capture.
+///   * `PrintWindow` and `GetDIBits` return values are now checked.
+///   * `GetDIBits` is called only after the bitmap is deselected from the DC
+///     (Windows requires the bitmap not be selected when read).
+///   * An all-black result is a typed error, never a black "success" image.
+unsafe fn capture_window_png(hwnd: HWND) -> Result<Image> {
     let hdc_screen = GetDC(hwnd);
     if hdc_screen.is_invalid() {
         return Err(anyhow!("GetDC failed"));
     }
     let (w, h) = window_size(hwnd)?;
+    if w <= 0 || h <= 0 {
+        let _ = ReleaseDC(hwnd, hdc_screen);
+        return Err(anyhow!("target window has an empty client area ({w}x{h})"));
+    }
+
     let hdc_mem = CreateCompatibleDC(hdc_screen);
     let hbmp = CreateCompatibleBitmap(hdc_screen, w, h);
     let _ = ReleaseDC(hwnd, hdc_screen);
@@ -293,23 +310,48 @@ unsafe fn capture_window_bmp(hwnd: HWND) -> Result<Vec<u8>> {
         if !hdc_mem.is_invalid() {
             let _ = DeleteDC(hdc_mem);
         }
+        if !hbmp.is_invalid() {
+            let _ = DeleteObject(hbmp);
+        }
         return Err(anyhow!("failed to allocate offscreen DC/bitmap"));
     }
 
     let old = SelectObject(hdc_mem, hbmp);
-    let _ = PrintWindow(hwnd, hdc_mem, PW_CLIENTONLY);
-    // Fall back to a raw BitBlt (only works if the desktop is foreground).
-    let _ = BitBlt(hdc_mem, 0, 0, w, h, hdc_mem, 0, 0, SRCCOPY);
+    let printed = PrintWindow(hwnd, hdc_mem, PW_CLIENTONLY);
+    // Deselect BEFORE GetDIBits (the bitmap must not be selected into a DC).
+    let _ = SelectObject(hdc_mem, old);
+    if !printed.as_bool() {
+        let _ = DeleteObject(hbmp);
+        let _ = DeleteDC(hdc_mem);
+        return Err(anyhow!(
+            "PrintWindow failed for target window — capture would be black"
+        ));
+    }
 
-    let bytes = dib_to_bmp(hdc_mem, hbmp, w, h)?;
-    SelectObject(hdc_mem, old);
+    let (rgb, width, height) = dib_to_rgb(hdc_mem, hbmp, w, h)?;
     let _ = DeleteObject(hbmp);
     let _ = DeleteDC(hdc_mem);
-    Ok(bytes)
+
+    // A failed hidden-desktop capture must surface as an error, not as a black
+    // image the model (and user) would interpret as a real observation.
+    assert_non_black(&rgb)?;
+
+    let img = RgbImage::from_raw(width, height, rgb)
+        .ok_or_else(|| anyhow!("DIB dimensions do not match the pixel buffer"))?;
+    let mut cursor = Cursor::new(Vec::new());
+    img.write_to(&mut cursor, ImageFormat::Png)
+        .map_err(|e| anyhow!("PNG encoding failed: {e}"))?;
+    let bytes = cursor.into_inner();
+    Ok(Image {
+        bytes,
+        mime: "image/png".to_string(),
+        width,
+        height,
+    })
 }
 
-/// Read the 24-bit DIB out of `hbmp` and wrap it in a BMP file header.
-unsafe fn dib_to_bmp(hdc: HDC, hbmp: HBITMAP, w: i32, h: i32) -> Result<Vec<u8>> {
+/// Read the 24-bit top-down DIB out of `hbmp` as interleaved RGB bytes.
+unsafe fn dib_to_rgb(hdc: HDC, hbmp: HBITMAP, w: i32, h: i32) -> Result<(Vec<u8>, u32, u32)> {
     let mut bmi: BITMAPINFO = zeroed();
     bmi.bmiHeader.biSize = mem::size_of::<BITMAPINFOHEADER>() as u32;
     bmi.bmiHeader.biWidth = w;
@@ -320,7 +362,8 @@ unsafe fn dib_to_bmp(hdc: HDC, hbmp: HBITMAP, w: i32, h: i32) -> Result<Vec<u8>>
 
     let stride = ((w * 3 + 3) / 4) * 4;
     let mut pixels = vec![0u8; (stride * h) as usize];
-    let _ = GetDIBits(
+    // W0.12: 0 lines read means no pixels were written. This was ignored.
+    let written = GetDIBits(
         hdc,
         hbmp,
         0,
@@ -329,22 +372,33 @@ unsafe fn dib_to_bmp(hdc: HDC, hbmp: HBITMAP, w: i32, h: i32) -> Result<Vec<u8>>
         &mut bmi,
         DIB_RGB_COLORS,
     );
+    if written == 0 {
+        return Err(anyhow!("GetDIBits failed — no pixel data captured"));
+    }
 
-    let file_size = 14 + mem::size_of::<BITMAPINFOHEADER>() as u32 + (stride * h) as u32;
-    let mut out = Vec::with_capacity(file_size as usize);
-    out.extend_from_slice(b"BM");
-    out.extend_from_slice(&file_size.to_le_bytes());
-    out.extend_from_slice(&0u32.to_le_bytes()); // reserved
-    out.extend_from_slice(
-        &(14 + mem::size_of::<BITMAPINFOHEADER>() as u32).to_le_bytes(),
-    ); // pixel offset
-    let header: &[u8] = std::slice::from_raw_parts(
-        &bmi.bmiHeader as *const _ as *const u8,
-        mem::size_of::<BITMAPINFOHEADER>(),
-    );
-    out.extend_from_slice(header);
-    out.extend_from_slice(&pixels);
-    Ok(out)
+    // DIB rows are BGR (bottom-up unless height is negative) and padded to a
+    // 4-byte stride; convert to tightly packed RGB for the PNG encoder.
+    let mut rgb = Vec::with_capacity((w * h * 3) as usize);
+    for y in 0..h as usize {
+        let row = &pixels[y * stride as usize..(y + 1) * stride as usize];
+        for x in 0..w as usize {
+            let i = x * 3;
+            rgb.push(row[i + 2]); // R
+            rgb.push(row[i + 1]); // G
+            rgb.push(row[i]);     // B
+        }
+    }
+    Ok((rgb, w as u32, h as u32))
+}
+
+/// Reject an all-black frame. A capture with no visible content is a failure
+/// (the old code returned it as a valid BMP), so this guards the whole loop.
+fn assert_non_black(rgb: &[u8]) -> Result<()> {
+    if rgb.iter().any(|&channel| channel > 8) {
+        Ok(())
+    } else {
+        Err(anyhow!("capture is entirely black — treating as a failed capture"))
+    }
 }
 
 /// Get a window's client size in pixels.
@@ -417,4 +471,32 @@ fn to_wide_owned(s: &str) -> Vec<u16> {
     let mut v: Vec<u16> = s.encode_utf16().collect();
     v.push(0);
     v
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn png_encoding_has_magic_bytes_and_mime() {
+        let img = RgbImage::from_raw(1, 1, vec![200, 10, 10]).expect("1x1 image");
+        let mut cursor = Cursor::new(Vec::new());
+        img.write_to(&mut cursor, ImageFormat::Png).expect("png write");
+        let bytes = cursor.into_inner();
+        let capture = Image {
+            bytes,
+            mime: "image/png".to_string(),
+            width: 1,
+            height: 1,
+        };
+        assert!(capture.bytes.starts_with(Image::PNG_MAGIC));
+        assert!(capture.is_png());
+        assert_eq!(crate::detect_image_mime(&capture.bytes), "image/png");
+    }
+
+    #[test]
+    fn all_black_capture_is_rejected() {
+        assert!(assert_non_black(&vec![0u8; 3 * 16 * 16]).is_err());
+        assert!(assert_non_black(&[0, 0, 0, 255, 0, 0]).is_ok());
+    }
 }

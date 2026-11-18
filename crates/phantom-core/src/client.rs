@@ -93,15 +93,37 @@ impl PhantomClient {
     }
 
     /// Ask the LLM for the next action given the current request.
+    ///
+    /// Per DEV-PLAN W0.2, a validation error from the server (`INVALID_ARGUMENT`)
+    /// is permanent: retrying it can never succeed and only masks the defect.
+    /// Transient transport/server errors get exactly one retry, after which a
+    /// typed error is returned to the agent loop (see W0.13) instead of being
+    /// swallowed as a `done`.
     pub async fn decide_action(&self, req: ActionRequest) -> anyhow::Result<phantom_proto::ActionResponse> {
         let client = self.inner.clone();
-        let resp = retry_unary(|| {
+        let mut last_err = String::new();
+        for attempt in 0..2u32 {
             let mut c = client.clone();
             let r = req.clone();
-            async move { c.decide_action(r).await.map(|x| x.into_inner()) }
-        })
-        .await?;
-        Ok(resp)
+            match c.decide_action(r).await {
+                Ok(resp) => return Ok(resp.into_inner()),
+                Err(status) => {
+                    let permanent = matches!(
+                        status.code(),
+                        tonic::Code::InvalidArgument
+                            | tonic::Code::Unauthenticated
+                            | tonic::Code::PermissionDenied
+                            | tonic::Code::FailedPrecondition
+                    );
+                    last_err = status.to_string();
+                    if permanent || attempt + 1 >= 2 {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(BASE_BACKOFF_MS)).await;
+                }
+            }
+        }
+        Err(anyhow::anyhow!("decide_action failed: {last_err}"))
     }
 
     /// Stream reasoning chunks for a request. Returns the async stream directly.

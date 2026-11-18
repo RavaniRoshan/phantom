@@ -7,6 +7,8 @@
 
 use anyhow::Result;
 
+use crate::Image;
+
 /// Placeholder for the Windows-only hidden desktop.
 pub struct VirtualDesktop {
     _private: (),
@@ -39,7 +41,7 @@ impl VirtualDesktop {
         anyhow::bail!(UNAVAILABLE)
     }
 
-    pub async fn screenshot(&self) -> Result<Vec<u8>> {
+    pub async fn screenshot(&self) -> Result<Image> {
         anyhow::bail!(UNAVAILABLE)
     }
 

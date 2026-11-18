@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import base64
 import os
 
 from .. import prompts
+from ..vision import b64
 from ..schema import ACTION_TOOL, PLAN_TOOL, as_openai_tool, normalize_action_dict, normalize_plan_dict
 from .base import ActionDecision, DecideRequest, LLMProvider, PlanRequest, SubTask
 
@@ -51,7 +51,7 @@ class OllamaProvider(LLMProvider):
         ]
 
     async def decide(self, req: DecideRequest) -> ActionDecision:
-        images = [base64.b64encode(req.screenshot).decode("ascii")] if req.screenshot else []
+        images = [b64(req.screenshot)] if req.screenshot else []
         args = await self._call_tool(
             prompts.DECIDER_SYSTEM,
             self.build_user_text(req),

@@ -22,6 +22,19 @@ from typing import Any
 # that an explicit low score from a provider (mock, nvidia) still stands out.
 DEFAULT_CONFIDENCE = 0.85
 
+# The only legal capability domains for a Phantom action. An action_type outside
+# this set is a model/validation error, never something to silently execute.
+VALID_ACTION_TYPES = frozenset({"browser", "cli", "file", "desktop", "done"})
+
+
+class ActionValidationError(ValueError):
+    """Raised when model output cannot be safely normalized into an action.
+
+    This is a subclass of ``ValueError`` so the gRPC server can map it to
+    ``INVALID_ARGUMENT`` with a single except clause. It exists as a distinct
+    type so callers can tell "the model produced garbage" from other ValueErrors.
+    """
+
 
 # ---------------------------------------------------------------------------
 # Canonical JSON Schema for a single action (the DecideAction contract).
@@ -136,12 +149,69 @@ def as_gemini_function(tool: dict[str, Any]) -> dict[str, Any]:
 # Whatever the provider returns, we coerce it into these canonical shapes so
 # the Rust side always receives a consistent ActionResponse.
 # ---------------------------------------------------------------------------
-def normalize_action_dict(d: Any) -> dict[str, Any]:
-    d = dict(d or {})
-    d.setdefault("action_type", "done")
-    d.setdefault("action", "done")
-    d.setdefault("params", {})
+def normalize_action_dict(d: Any, *, strict: bool = True) -> dict[str, Any]:
+    """Coerce a provider's raw action dict into the canonical shape.
+
+    ``strict=True`` (the default, and the only mode the gRPC server uses) is
+    **fail-closed**: a missing/invalid ``action_type`` or ``action`` raises
+    :class:`ActionValidationError` instead of silently becoming ``done``. This
+    is the fix for the "false success" defect — an empty or malformed model
+    output must never be reported to the user as a completed task.
+
+    ``strict=False`` preserves the legacy lenient behaviour (missing fields
+    default to ``done``) for tooling that deliberately wants a no-op fallback.
+    It is never used on the live decision path.
+
+    Raises:
+        ActionValidationError: if ``strict`` and a required field is missing,
+            empty, or invalid.
+    """
+    if not isinstance(d, dict):
+        if strict:
+            raise ActionValidationError(f"action must be an object, got {type(d).__name__}")
+        d = {}
+    else:
+        d = dict(d)
+
+    action_type = d.get("action_type")
+    action = d.get("action")
+
+    if strict:
+        # Explicit model intent is required for *every* action — above all for
+        # `done`, which must never be inferred from an empty/malformed output.
+        if not isinstance(action_type, str) or not action_type.strip():
+            raise ActionValidationError("missing or invalid 'action_type'")
+        action_type = action_type.strip()
+        if action_type not in VALID_ACTION_TYPES:
+            raise ActionValidationError(
+                f"invalid action_type {action_type!r}; expected one of {sorted(VALID_ACTION_TYPES)}"
+            )
+        if not isinstance(action, str) or not action.strip():
+            raise ActionValidationError("missing or invalid 'action'")
+        action = action.strip()
+        if action_type == "done" and action != "done":
+            raise ActionValidationError("a 'done' action_type requires action == 'done'")
+        params = d.get("params", {})
+        if not isinstance(params, dict):
+            raise ActionValidationError(
+                f"'params' must be an object, got {type(params).__name__}"
+            )
+    else:
+        # Legacy lenient path — intentionally kept for offline tooling only.
+        if not isinstance(action_type, str) or not action_type.strip():
+            action_type = "done"
+        if not isinstance(action, str) or not action.strip():
+            action = "done"
+        params = d.get("params", {})
+        if not isinstance(params, dict):
+            params = {}
+
+    d["action_type"] = action_type
+    d["action"] = action
     d.setdefault("reasoning", "")
+    if not isinstance(d["reasoning"], str):
+        d["reasoning"] = str(d["reasoning"])
+
     # Resolve confidence: honour an explicit, valid, in-range value; otherwise
     # substitute a sane default so a provider that omits it (or reports 0 /
     # NaN / garbage) does not trip the autonomy gate on every action. A `done`
@@ -154,12 +224,9 @@ def normalize_action_dict(d: Any) -> dict[str, Any]:
     if conf is None or not math.isfinite(conf) or conf <= 0.0:
         conf = 1.0 if d["action_type"] == "done" else DEFAULT_CONFIDENCE
     d["confidence"] = max(0.0, min(1.0, conf))
-    params = d["params"]
-    d["params"] = (
-        {str(k): str(v) for k, v in params.items()}
-        if isinstance(params, dict)
-        else {}
-    )
+
+    # Params are a string->string map on the wire; coerce defensively.
+    d["params"] = {str(k): str(v) for k, v in params.items()}
     return d
 
 

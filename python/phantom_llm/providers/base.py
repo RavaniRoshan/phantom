@@ -43,6 +43,10 @@ class DecideRequest:
     history: list[tuple[str, str, bool]] = field(default_factory=list)
     mode: str = "safe"
     backend: str = ""
+    # W0.1: MIME declared by the Rust capture side (normally "image/png").
+    # Providers must honor it rather than hard-coding a media type. Appended
+    # last so existing positional construction is unaffected.
+    screenshot_mime: str = ""
 
 
 @dataclass
@@ -70,17 +74,18 @@ class LLMProvider(abc.ABC):
         """Decompose a task into ordered backend-specific subtasks."""
 
     async def stream(self, req: DecideRequest) -> AsyncIterator[ThinkingChunk]:
-        """Default streaming: surface the decision as reasoning chunks.
+        """Default NON-inferential streaming (W0.3).
 
-        Providers may override this with true token streaming from their SDK.
+        This must never call ``decide()``: the agent loop performs exactly one
+        inference per step via DecideAction. The old fallback called decide a
+        second time, doubling cost/latency and letting the streamed reasoning
+        disagree with the action that actually executed. Providers that add
+        genuine token streaming may override this; local placeholders keep the
+        TUI responsive without a second model call.
         """
-        yield ThinkingChunk("Analyzing task and current state...", "planning")
-        decision = await self.decide(req)
-        if decision.reasoning:
-            yield ThinkingChunk(decision.reasoning, "executing")
-        yield ThinkingChunk(
-            f"Next: [{decision.action_type}] {decision.action}", "observing"
-        )
+        yield ThinkingChunk("Preparing the next action...", "planning")
+        if req.backend:
+            yield ThinkingChunk(f"Active backend: {req.backend}", "observing")
 
     # --- shared helpers ---------------------------------------------------
     @staticmethod

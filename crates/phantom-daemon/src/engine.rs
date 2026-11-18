@@ -43,14 +43,25 @@ pub async fn run(mut rx: EventRx, cfg: Config, dry_run: bool) {
         }
 
         let (etx, mut erx) = mpsc::channel::<AgentEvent>(64);
-        let task_handle = agent.as_ref().unwrap().run(&task, etx);
+        // Spawn the run so it is polled while we drain events. Awaiting the
+        // drain first deadlocked: the run() future was never polled, so no
+        // events could ever arrive. W0.13 also requires failures to surface.
+        let task_agent = agent.as_ref().unwrap().clone();
+        let task_handle = tokio::spawn(async move { task_agent.run(&task, etx).await });
         drain_events(&mut erx, &shot_seq).await;
 
-        if let Err(e) = task_handle.await {
-            tracing::error!("task failed: {e}");
-            // Drop the agent so the next event reconnects (the failure may have
-            // been a transport error from a service restart).
-            agent = None;
+        match task_handle.await {
+            Ok(Ok(outcome)) => tracing::info!("task outcome: {outcome:?}"),
+            Ok(Err(e)) => {
+                tracing::error!("task failed: {e}");
+                // Drop the agent so the next event reconnects (the failure may
+                // have been a transport error from a service restart).
+                agent = None;
+            }
+            Err(e) => {
+                tracing::error!("agent task failed to join: {e}");
+                agent = None;
+            }
         }
     }
 

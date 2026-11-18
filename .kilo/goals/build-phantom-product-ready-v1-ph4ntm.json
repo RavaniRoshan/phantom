@@ -1,0 +1,84 @@
+{
+  "id": "ph4ntm",
+  "slug": "build-phantom-product-ready-v1-ph4ntm",
+  "objective": "Implement docs/DEVELOPMENT-PLAN.md to product-ready v1: land all Phase 0 correctness/safety blockers with tests and ADRs, then work through W1-W8 workstreams in plan order. Persistent across sessions; work until all criteria pass or a halt condition is hit.",
+  "status": "active",
+  "branch": "goal/build-phantom-product-ready-v1-ph4ntm",
+  "scope": "whole repository (Windows-first Rust + Python agent)",
+  "scope_lock": ["crates/", "python/", "proto/", "docs/", "research/"],
+  "scope_flex": ["scripts/", ".github/", ".kilo/"],
+  "criteria": [
+    {
+      "label": "Fail-closed parsing: 0 false done on malformed corpus",
+      "check": "python -m unittest python.tests.test_schema_strict -v",
+      "must_pass": true,
+      "last_result": "PASS (7 tests)"
+    },
+    {
+      "label": "Image transport contract markers present (PNG at capture + mime field + shared helper)",
+      "check": "python -m unittest python.tests.test_image_contract -v",
+      "must_pass": true,
+      "last_result": "PASS (6 tests)"
+    },
+    {
+      "label": "Single inference per step: no stream_thinking pre-call in agent execute_loop",
+      "check": "python -m unittest python.tests.test_single_inference -v",
+      "must_pass": true,
+      "last_result": "PASS (2 tests)"
+    },
+    {
+      "label": "Failure propagation: no Ok(()) on failure; typed RunOutcome",
+      "check": "python -m unittest python.tests.test_failure_propagation -v",
+      "must_pass": true,
+      "last_result": "PASS (5 tests)"
+    },
+    {
+      "label": "ADRs 001/002/005 exist",
+      "check": "python -c \"import pathlib; assert all(pathlib.Path('docs/adr').joinpath(f).exists() for f in ['ADR-001.md','ADR-002.md','ADR-005.md'])\"",
+      "must_pass": true,
+      "last_result": "PASS"
+    },
+    {
+      "label": "Rust workspace compiles + all Rust tests pass",
+      "check": "cargo check --workspace --all-targets && cargo test --workspace",
+      "must_pass": true,
+      "last_result": "PASS (cargo check clean; 34 tests pass)"
+    },
+    {
+      "label": "Full section-1 release gates green on a Windows runner (golden tasks, red-team, soak, installer)",
+      "check": "docs/benchmarks/release-gates.md records all section-1 gates green on Windows",
+      "must_pass": true,
+      "last_result": "NOT YET — blocked until W0.11 harness + W1/W4/W8 land"
+    }
+  ],
+  "tasks": [
+    {"id": 1, "desc": "W0.1 Image transport contract: PNG at capture, screenshot_mime proto field (7), shared encode_image helper, provider MIME honor, contract tests", "status": "done"},
+    {"id": 2, "desc": "W0.2 Fail-closed action parsing: strict normalize_action_dict, no done default, INVALID_ARGUMENT mapping, 100-case malformed suite", "status": "done"},
+    {"id": 3, "desc": "W0.3 One inference per step: removed stream_thinking pre-call, local Thinking from decision, base.stream non-inferential", "status": "done"},
+    {"id": 4, "desc": "W0.12 Capture integrity: removed BitBlt self-copy, checked PrintWindow/GetDIBits, deselected bitmap before GetDIBits, black-as-error, PNG magic test", "status": "done"},
+    {"id": 5, "desc": "W0.13 Failure propagation: typed RunOutcome, decide failure + max-iter return Err, daemon surfaces failures (+ fixed daemon deadlock), Rust client retries INVALID_ARGUMENT at most once", "status": "done"},
+    {"id": 6, "desc": "W0.7/W0.8/W0.9 Security blockers: ShellExecuteW app allowlist, authenticated webhook (401/413/409), Windows Credential Manager secrets", "status": "todo"},
+    {"id": 7, "desc": "W0.10/W0.11/W0.14 Cancellation tokens, golden-task harness + baseline, TUI per-task isolation + task list", "status": "todo"},
+    {"id": 8, "desc": "W0.0 Hidden-desktop feasibility spike: per-app pass/fail report + narrow-vs-isolated-VM decision (needs real Windows session)", "status": "todo"},
+    {"id": 9, "desc": "ADRs 001 (image transport), 002 (typed action schema v2), 005 (coordinate contract)", "status": "done"},
+    {"id": 10, "desc": "W1 Desktop backend: window selection, coordinates, input vocabulary, UIA+SoM, app profiles, pool, DPI", "status": "todo"},
+    {"id": 11, "desc": "W2 Browser backend: bounded extraction, waits, action coverage, profiles, selector grounding, screenshot policy", "status": "todo"},
+    {"id": 12, "desc": "W3 Reliability: SQLite run store, task queue, audit log, logging/metrics, crash recovery, retry semantics", "status": "todo"},
+    {"id": 13, "desc": "W4 Safety engineering: capability policy engine, injection isolation, shell hardening, file-op safety, threat model", "status": "todo"},
+    {"id": 14, "desc": "W5/W6/W7 Product surface, orchestration, verification: task UI, notifications, swarm DAG, verifier pass, re-planning", "status": "todo"},
+    {"id": 15, "desc": "W8 Packaging + GA: installer, service/autostart, wizard, updater, support bundle, docs, release QA; full section-1 gates", "status": "todo"}
+  ],
+  "current_task": 6,
+  "iterations": 6,
+  "budget_used": 0,
+  "max_iterations": 50,
+  "negative_knowledge": [
+    "BUILD SETUP (critical for next session): no global cargo. A self-contained Rust toolchain was bootstrapped at C:\\Users\\shiva\\AppData\\Local\\Temp\\opencode\\rust-bootstrap (RUSTUP_HOME=<that>\\rustup, CARGO_HOME=<that>\\cargo, PATH prepend <that>\\cargo\\bin). Minimal profile lacked a working dlltool; installed WinLibs via winget (BrechtSanders.WinLibs.POSIX.UCRT) at C:\\Users\\shiva\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin. For cargo check/test set PATH to include that mingw bin and RUSTFLAGS=\"-C dlltool=<mingw>\\dlltool.exe -C linker=x86_64-w64-mingw32-gcc.exe\". Then `cargo check --workspace --all-targets` and `cargo test --workspace` both pass.",
+    "Python has NO grpc/pytest/provider SDKs; use stdlib unittest for new tests (python/tests/test_schema_strict.py, test_image_contract.py, test_single_inference.py, test_failure_propagation.py). google.protobuf stubs are absent; proto changes regenerate only via cargo build (vendored protoc).",
+    "Existing pytest tests test_providers.py and test_nvidia_provider.py were updated for fail-closed semantics but CANNOT be run here (no pytest).",
+    "The full plan is ~44 person-weeks; this goal is intentionally persistent across sessions."
+  ],
+  "context_summary": "Session 1 complete. Landed the plan's explicit starting slice (Phase 0 correctness blockers) on branch goal/build-phantom-product-ready-v1-ph4ntm. W0.1: proto ActionRequest.screenshot_mime=7; Rust Image struct {bytes,mime,width,height} + detect_image_mime; PNG encoding at capture via image crate; shared Python vision.py encode_image/effective_image_mime used by all 5 providers (no hard-coded media types). W0.2: normalize_action_dict(strict=True default) raises ActionValidationError on missing/invalid action_type/action, no done default; server maps ValueError->INVALID_ARGUMENT and re-normalizes strictly; Rust client retries INVALID_ARGUMENT at most once. W0.3: removed agent stream_thinking pre-call (was a 2nd inference); local Thinking chunk from decision; base.stream no longer calls decide. W0.12: removed BitBlt dst=dst self-copy, check PrintWindow/GetDIBits returns, deselect bitmap before GetDIBits, all-black frame = typed error, PNG magic test. W0.13: RunOutcome typed enum; decide failure + max-iter return Err; daemon spawn fix (old code deadlocked by draining before polling the run future) and surfaces Err; agent loop has no trailing Ok(()). Also wrote ADR-001/002/005. Verified: cargo check clean, 34 Rust tests pass, 20 Python stdlib tests pass. Next: task 6 (W0.7 desktop open hardening via ShellExecuteW+allowlist, W0.8 authenticated webhook 401/413/409, W0.9 Windows Credential Manager secrets).",
+  "created_at": "2026-11-18T00:00:00Z",
+  "updated_at": "2026-11-18T01:00:00Z"
+}

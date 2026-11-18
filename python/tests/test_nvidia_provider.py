@@ -85,12 +85,13 @@ def test_decide_parses_messy_model_output_into_neutral_action():
     assert d.confidence == 0.9  # coerced from string by normalize
 
 
-def test_decide_falls_back_to_done_on_unparseable_output():
+def test_decide_fails_closed_on_unparseable_output():
+    # W0.2: unparseable model output must raise, never become a silent `done`.
+    from phantom_llm.schema import ActionValidationError
+
     p = _provider_with("I cannot help with that.")
-    d = asyncio.run(p.decide(DecideRequest(task_description="whatever")))
-    # normalize_action_dict defaults to a safe 'done' when nothing parses.
-    assert d.action_type == "done"
-    assert d.action == "done"
+    with pytest.raises(ActionValidationError):
+        asyncio.run(p.decide(DecideRequest(task_description="whatever")))
 
 
 def test_plan_parses_steps_and_fills_orders():

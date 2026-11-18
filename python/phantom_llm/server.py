@@ -55,6 +55,9 @@ def _decide_request_from_proto(request) -> DecideRequest:
         current_context=request.current_context,
         screenshot=request.screenshot or None,
         history=[(h.action, h.result, h.success) for h in request.history],
+        # getattr keeps us compatible with stale generated stubs that predate
+        # the screenshot_mime field; once regenerated it is always present.
+        screenshot_mime=getattr(request, "screenshot_mime", "") or "",
         mode=request.mode or "safe",
         backend=request.backend,
     )
@@ -65,17 +68,39 @@ class PhantomLLMServicer(phantom_pb2_grpc.PhantomLLMServicer):
         self.provider = provider
 
     async def DecideAction(self, request, context):
-        decision = await self.provider.decide(_decide_request_from_proto(request))
+        try:
+            decision = await self.provider.decide(_decide_request_from_proto(request))
+            # Defense in depth: re-normalize strictly on the server boundary so
+            # no provider (including mocks that build ActionDecision directly)
+            # can turn malformed/missing model output into a silent `done`.
+            action = normalize_action_dict(
+                {
+                    "action_type": decision.action_type,
+                    "action": decision.action,
+                    "params": decision.params,
+                    "reasoning": decision.reasoning,
+                    "confidence": decision.confidence,
+                },
+                strict=True,
+            )
+        except ValueError as e:
+            # Fail closed: surface a structured INVALID_ARGUMENT. The Rust
+            # client treats this as permanent, retries at most once, and then
+            # propagates a task error instead of reporting false success.
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"invalid model action: {e}")
         return phantom_pb2.ActionResponse(
-            action_type=decision.action_type,
-            action=decision.action,
-            params=decision.params,
-            reasoning=decision.reasoning,
-            confidence=decision.confidence,
+            action_type=action["action_type"],
+            action=action["action"],
+            params=action["params"],
+            reasoning=action["reasoning"],
+            confidence=action["confidence"],
         )
 
     async def PlanTask(self, request, context):
-        steps = await self.provider.plan(PlanRequest(task=request.task, mode=request.mode or "safe"))
+        try:
+            steps = await self.provider.plan(PlanRequest(task=request.task, mode=request.mode or "safe"))
+        except ValueError as e:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"invalid plan: {e}")
         return phantom_pb2.PlanResponse(
             steps=[
                 phantom_pb2.SubTask(order=s.order, description=s.description, backend=s.backend)

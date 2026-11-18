@@ -30,6 +30,9 @@ path = "examples/pool_smoke.rs"
 # The hidden-desktop implementation is Windows-only. On other platforms this
 # crate compiles to a stub (see src/stub.rs) so the workspace still type-checks.
 [target.'cfg(windows)'.dependencies]
+# W0.1: encode captures to PNG at the source so every provider receives the
+# same, provider-compatible image format (ADR-001).
+image = "0.25"
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_System_StationsAndDesktops",

@@ -75,16 +75,20 @@ async fn main() {
     let mut ok_capture = false;
     let mut before_bytes: Option<Vec<u8>> = None;
     match desktop.screenshot().await {
-        Ok(bytes) => {
-            let stats = bmp_stats(&bytes);
-            ok_capture = stats.non_blank;
+        Ok(image) => {
+            // W0.1/W0.12: capture() now returns a PNG Image and errors on
+            // black frames, so a successful return is itself the validity check.
+            ok_capture = image.is_png();
+            let phantom_desktop::Image { bytes, mime, width, height } = image;
             before_bytes = Some(bytes.clone());
-            let p = out_dir.join("01-before.bmp");
+            let p = out_dir.join("01-before.png");
             let _ = std::fs::write(&p, &bytes);
             log!(
-                "[ok]   screenshot #1: {} bytes, {} -> {}",
+                "[ok]   screenshot #1: {}x{}, {} bytes, {} -> {}",
+                width,
+                height,
                 bytes.len(),
-                stats.describe(),
+                mime,
                 p.display()
             );
         }
@@ -101,16 +105,17 @@ async fn main() {
     // 5. Capture AFTER typing (visual proof of any text that landed).
     let mut after_bytes: Option<Vec<u8>> = None;
     match desktop.screenshot().await {
-        Ok(bytes) => {
-            let stats = bmp_stats(&bytes);
-            ok_capture |= stats.non_blank;
+        Ok(image) => {
+            ok_capture |= image.is_png();
+            let phantom_desktop::Image { bytes, width, height, .. } = image;
             after_bytes = Some(bytes.clone());
-            let p = out_dir.join("02-after.bmp");
+            let p = out_dir.join("02-after.png");
             let _ = std::fs::write(&p, &bytes);
             log!(
-                "[ok]   screenshot #2: {} bytes, {} -> {}",
+                "[ok]   screenshot #2: {}x{}, {} bytes -> {}",
+                width,
+                height,
                 bytes.len(),
-                stats.describe(),
                 p.display()
             );
         }
@@ -167,23 +172,6 @@ fn finish(out_dir: &PathBuf, report: &str) {
     }
 }
 
-struct BmpStats {
-    non_blank: bool,
-    nonzero_ratio: f64,
-    total: usize,
-}
-
-impl BmpStats {
-    fn describe(&self) -> String {
-        format!(
-            "{:.1}% non-zero pixels ({} bytes){}",
-            self.nonzero_ratio * 100.0,
-            self.total,
-            if self.non_blank { "" } else { " [BLANK]" }
-        )
-    }
-}
-
 /// Count pixels that differ between two same-sized 24-bit BMPs. Returns the
 /// absolute count of differing bytes and the ratio over the pixel region.
 struct BmpDiff {
@@ -208,25 +196,6 @@ fn pixel_offset(bytes: &[u8]) -> usize {
     }
 }
 
-/// Compute how much of a 24-bit BMP is non-black. A hidden-desktop capture that
-/// failed (e.g. BitBlt on an off-screen desktop) comes back all-zero; a real
-/// `PrintWindow` capture of a window has substantial non-zero content.
-fn bmp_stats(bytes: &[u8]) -> BmpStats {
-    // Skip the 14-byte file header + 40-byte BITMAPINFOHEADER when present.
-    let pixel_off = if bytes.len() > 54 && &bytes[0..2] == b"BM" {
-        u32::from_le_bytes([bytes[10], bytes[11], bytes[12], bytes[13]]) as usize
-    } else {
-        0
-    };
-    let pixels = bytes.get(pixel_off..).unwrap_or(&[]);
-    let total = pixels.len();
-    let nonzero = pixels.iter().filter(|&&b| b != 0).count();
-    let ratio = if total == 0 { 0.0 } else { nonzero as f64 / total as f64 };
-    BmpStats {
-        // >0.5% non-zero bytes means we captured real window content, not a
-        // black/blank surface.
-        non_blank: ratio > 0.005,
-        nonzero_ratio: ratio,
-        total,
-    }
-}
+// W0.1/W0.12: black-frame detection now lives in `VirtualDesktop::screenshot`
+// (a black capture is a typed error), and captures are PNG with a magic-byte
+// assertion in `Image::is_png`, so the old BMP-blank heuristics are gone.

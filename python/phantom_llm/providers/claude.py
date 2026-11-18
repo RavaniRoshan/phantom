@@ -7,10 +7,10 @@ to every other provider and there is no lock-in.
 
 from __future__ import annotations
 
-import base64
 import os
 
 from .. import prompts
+from ..vision import b64, effective_image_mime
 from ..schema import (
     CANONICAL_ACTION_SCHEMA,
     PLAN_SCHEMA,
@@ -71,8 +71,8 @@ class ClaudeProvider(LLMProvider):
                     "type": "image",
                     "source": {
                         "type": "base64",
-                        "media_type": "image/png",
-                        "data": base64.b64encode(req.screenshot).decode("ascii"),
+                        "media_type": effective_image_mime(req.screenshot, req.screenshot_mime),
+                        "data": b64(req.screenshot),
                     },
                 }
             )
