@@ -1,0 +1,16 @@
+[package]
+name = "phantom-vm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+async-trait = "0.1"
+phantom-desktop = { path = "../phantom-desktop" }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

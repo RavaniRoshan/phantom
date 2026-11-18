@@ -2377,6 +2377,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "phantom-vm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "phantom-desktop",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "pin-project"
 version = "1.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"

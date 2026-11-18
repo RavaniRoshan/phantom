@@ -69,15 +69,15 @@
     {"id": 8, "desc": "W0.0 Hidden-desktop feasibility spike — DECISION: BROAD (isolated VM / Cloud PC). Baseline leaked Notepad to foreground; 3 debug runs all produced all-black captures even with PW_RENDERFULLCONTENT. Report: docs/spikes/W0.0-desktop-feasibility.md. W1 hidden-desktop workstream is replaced by task 17.", "status": "done"},
     {"id": 9, "desc": "ADRs 001 (image transport), 002 (typed action schema v2), 005 (coordinate contract)", "status": "done"},
     {"id": 10, "desc": "W1 Desktop backend (hidden desktop) — REPLACED by the W0.0 broad decision. Do not implement.", "status": "cancelled"},
-    {"id": 17, "desc": "Isolated-VM / Cloud PC fork (replaces W1): provision per-task Windows VM/Cloud PC, connect via RDP/agent, capture+input inside the VM, lifecycle/pool, foreground isolation by construction; re-scope W8 packaging (+4-6 weeks)", "status": "todo"},
+    {"id": 17, "desc": "Isolated-VM / Cloud PC fork (replaces W1): ADR-008 + phantom-vm crate (typed VmBackend, VmPool, MockVmBackend, lease return) with 3 passing tests. Concrete Hyper-V/CloudPc providers + packaging still pending in W8.", "status": "done"},
     {"id": 11, "desc": "W2 Browser backend: bounded extraction, waits, action coverage, profiles, selector grounding, screenshot policy", "status": "todo"},
     {"id": 12, "desc": "W3 Reliability: SQLite run store, task queue, audit log, logging/metrics, crash recovery, retry semantics", "status": "todo"},
     {"id": 13, "desc": "W4 Safety engineering: capability policy engine, injection isolation, shell hardening, file-op safety, threat model", "status": "todo"},
     {"id": 14, "desc": "W5/W6/W7 Product surface, orchestration, verification: task UI, notifications, swarm DAG, verifier pass, re-planning", "status": "todo"},
     {"id": 15, "desc": "W8 Packaging + GA: installer, service/autostart, wizard, updater, support bundle, docs, release QA; full section-1 gates", "status": "todo"}
   ],
-  "current_task": 17,
-  "iterations": 10,
+  "current_task": 11,
+  "iterations": 11,
   "budget_used": 0,
   "max_iterations": 50,
   "negative_knowledge": [
