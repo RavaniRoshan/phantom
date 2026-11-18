@@ -1,0 +1,40 @@
+---
+title: Your first task
+description: Compose a task, watch the live activity, and approve a consequential action.
+sidebar:
+  label: Your first task
+  order: 2
+---
+
+## Compose
+
+Open the main window and use the composer:
+
+- **What should be done** — a plain-language goal.
+- **Where / which app** — the target inside the VM.
+- **Done when** — the acceptance criterion Phantom must verify before reporting success.
+
+Start in **Ask before consequential actions** mode. You can switch to full VM access later.
+
+## Watch
+
+The live activity pane shows:
+
+- the step timeline with timestamps,
+- the latest VM screenshot,
+- short narration of what the agent is doing.
+
+Use **Stop task** to cancel and **Take over VM** when the agent needs credentials, a
+payment, or a CAPTCHA.
+
+## Approve
+
+An approval modal names the exact action ("Submit the order?"), shows the last frame
+and the target, and offers **Approve**, **Edit & approve**, **Deny**, and **Take over**.
+Every decision is recorded in the audit log.
+
+:::tip
+A good first task is small and checkable: "Open Notepad, write a three-line release
+note, and save it to the task artifacts folder." Avoid sign-ins and payments until you
+trust the flow.
+:::

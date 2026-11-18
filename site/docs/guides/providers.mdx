@@ -1,0 +1,36 @@
+---
+title: Providers & keys
+description: Bring your own API key for OpenAI, Anthropic, Gemini, OpenRouter or a local model.
+sidebar:
+  label: Providers & keys
+  order: 2
+---
+
+Phantom uses **BYOK**: you supply keys, we do not proxy or pool them.
+
+## Supported families
+
+| Provider | Key shape | Notes |
+|---|---|---|
+| OpenAI | `sk-…` | `/v1/models` has no capability metadata; Phantom uses a shipped table. |
+| Anthropic | `sk-ant-…` | Capabilities and lifecycle exposed by the API. |
+| Google Gemini | — | Free tier may use submitted content for model improvement — consent required. |
+| OpenRouter | `sk-or-v1-…` | Live pricing; `-1` sentinel is never shown as free. |
+| Local / OpenAI-compatible | none | Defaults to Ollama at `localhost:11434/v1`. |
+
+## Validation on save
+
+The wizard tests the key and reports one of six outcomes: accepted, rejected (401),
+API not enabled (403), rate limited (429), unreachable, or connected-but-no-models.
+It never leaves you debugging inside the chat.
+
+## Storage
+
+All keys are stored as one DPAPI-encrypted blob under a single Windows Credential
+Manager entry. `key_ref` in the protocol is a **reference**, never a secret. Portable
+mode is explicitly labelled "unencrypted".
+
+:::warning
+In the EEA/CH/UK, use a paid-tier key when making an API client available to others;
+free-tier use for that case is likely prohibited and needs legal review.
+:::
