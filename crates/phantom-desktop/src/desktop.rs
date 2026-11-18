@@ -21,7 +21,7 @@ use image::{ImageFormat, RgbImage};
 use std::io::Cursor;
 
 use crate::Image;
-use windows::Win32::Storage::Xps::{PrintWindow, PW_CLIENTONLY};
+use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS, PW_CLIENTONLY};
 use windows::Win32::System::StationsAndDesktops::{
     CloseDesktop, CreateDesktopW, GetProcessWindowStation, GetThreadDesktop,
     GetUserObjectInformationW, SetThreadDesktop, DESKTOP_CONTROL_FLAGS, HDESK, UOI_NAME,
@@ -32,7 +32,8 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, FindWindowExW, GetClientRect, GetForegroundWindow, IsWindowVisible, PostMessageW,
-    SetForegroundWindow, ShowWindow, SW_RESTORE, SW_SHOWNORMAL, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    SetForegroundWindow, ShowWindow, SW_RESTORE, SW_SHOWNORMAL, PW_RENDERFULLCONTENT,
+    WM_LBUTTONDOWN, WM_LBUTTONUP,
 };
 use crate::input;
 
@@ -350,8 +351,13 @@ impl Drop for VirtualDesktop {
     }
 }
 
+/// CREATE_NO_WINDOW: console hosts (e.g. the keep-alive `cmd.exe`) must not
+/// create a black console window on the hidden desktop — otherwise
+/// `find_window()` picks it first and every capture is all black.
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// Spawn `app` with `args` so its first thread lands on the desktop at
-/// `desktop_path` (a `WinSta0\<name>` string).
+/// `desktop_path` (a `<station>\<name>` string).
 fn spawn_on_desktop(app: &str, args: &str, desktop_path: &str) -> Result<PROCESS_INFORMATION> {
     let cmd = format!("{} {}", app, args);
     let mut cmd_vec = to_wide_owned(&cmd);
@@ -369,7 +375,7 @@ fn spawn_on_desktop(app: &str, args: &str, desktop_path: &str) -> Result<PROCESS
             None,
             None,
             BOOL(0),
-            PROCESS_CREATION_FLAGS(0),
+            PROCESS_CREATION_FLAGS(CREATE_NO_WINDOW),
             None,
             None,
             &si,
@@ -417,7 +423,14 @@ unsafe fn capture_window_png(hwnd: HWND) -> Result<Image> {
     }
 
     let old = SelectObject(hdc_mem, hbmp);
-    let printed = PrintWindow(hwnd, hdc_mem, PW_CLIENTONLY);
+    // PW_RENDERFULLCONTENT is required on modern Windows (DWM-composed apps
+    // render black with plain PW_CLIENTONLY). This is the W0.0 black-capture
+    // hypothesis — if the frame is still black, hidden-desktop capture is a
+    // no-go and the isolated-VM fork must be taken.
+    // PRINT_WINDOW_FLAGS is a newtype without BitOr in windows 0.58; compose
+    // the raw bit values (PW_CLIENTONLY=1, PW_RENDERFULLCONTENT=2).
+    let flags = PRINT_WINDOW_FLAGS(PW_CLIENTONLY.0 | PW_RENDERFULLCONTENT);
+    let printed = PrintWindow(hwnd, hdc_mem, flags);
     // Deselect BEFORE GetDIBits (the bitmap must not be selected into a DC).
     let _ = SelectObject(hdc_mem, old);
     if !printed.as_bool() {
