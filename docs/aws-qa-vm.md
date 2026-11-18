@@ -86,5 +86,7 @@ aws ec2 run-instances --profile $profile --region $region `
 - [x] Agent Toolkit configured via `aws configure agent-toolkit --yes --region us-east-1 --profile phantom`; skills catalog verified via `list-available-skills`
 - [x] MCP config patched: `~/.config/opencode/opencode.json` → `aws-mcp.env.AWS_MCP_PROXY_PROFILES = "phantom"`
 - [x] New AWS experience rules appended to `AGENTS.md` with idempotent markers; help_level = HIGH
-- [ ] EC2 instance launched with the config above (next step)
+- [ ] EC2 instance launched with the config above — **BLOCKED 2026-11-18**: `RunInstances` returns `Blocked: This account is currently blocked and not recognized as a valid account.` AWS support link: https://support.console.aws.amazon.com/support/home?region=us-east-1#/case/create?issueType=customer-service&serviceCode=account-management&categoryCode=account-verification. The project plan is ACTIVE/FREE with $100 credit and STS works; this is account verification, not credentials or quota.
 - [ ] RDP connected, guest agent autostart registered, B0.3 capture proof run
+- [x] Resources prepared and reusable once unblocked: key pair `phantom-qa` (`~/.ssh/phantom-qa.pem`), SG `sg-0fc855409019b1a8e` (RDP 3389 from `49.36.71.211/32`), AMI `ami-09339485387465d79`, instance type `m7i-flex.large` (the only Free-Tier-eligible 8 GB x86 type; `t3.large` is NOT eligible on this FREE plan)
+- Note: Free-Tier-eligible still consumes credits; stop the instance when idle.
