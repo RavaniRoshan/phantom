@@ -27,7 +27,7 @@ class SiteTest(unittest.TestCase):
         docs = list((ROOT / "site/docs").rglob("*.mdx"))
         self.assertGreaterEqual(len(docs), 10)
         names = {p.name for p in docs}
-        for expected in ("index.mdx", "installation.mdx", "providers.mdx", "safety.mdx",
+        for expected in ("introduction.mdx", "installation.mdx", "providers.mdx", "safety.mdx",
                          "architecture.mdx", "release-gates.mdx",
                          "github-actions-capture.mdx"):
             self.assertIn(expected, names)
