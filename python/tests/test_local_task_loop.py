@@ -39,8 +39,8 @@ def request(path, method="GET", body=None):
 class LocalTaskLoopTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if not DAEMON.exists():
-            raise RuntimeError("build phantom-daemon first")
+        if sys.platform != "win32" or not DAEMON.exists():
+            raise unittest.SkipTest("local bare-Windows validation (needs built daemon)")
         CONFIG.write_text(
             'provider = "mock"\nmode = "safe"\nmax_iterations = 4\n'
             'grpc_endpoint = "http://127.0.0.1:50053"\n',

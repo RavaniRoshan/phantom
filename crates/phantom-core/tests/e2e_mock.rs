@@ -109,6 +109,9 @@ fn wait_for_port(port: u16, timeout: Duration) -> bool {
 /// Build a Safe-mode config pointed at `endpoint` with a bounded loop.
 fn e2e_config(endpoint: &str, gate: f32) -> Config {
     let mut cfg = Config::default();
+    // The agent sends its provider on every request; it must match the mock
+    // server we booted, otherwise the call escapes to a live provider.
+    cfg.provider = "mock".to_string();
     cfg.mode = Mode::Safe;
     cfg.grpc_endpoint = endpoint.to_string();
     cfg.max_iterations = 10;
