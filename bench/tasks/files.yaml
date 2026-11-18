@@ -1,0 +1,272 @@
+- id: files-01
+  backend: files
+  prompt: 'Create a file containing phantom-file-01'
+  setup:
+    - type: mkdir
+      path: '{workdir}/files'
+  action:
+    type: write_file
+    path: '{workdir}/files/task-01.txt'
+    content: 'phantom-file-01'
+  check:
+    type: file_contains
+    path: '{workdir}/files/task-01.txt'
+    text: 'phantom-file-01'
+  artifacts: ['{workdir}/files/task-01.txt']
+- id: files-02
+  backend: files
+  prompt: 'Create a file containing phantom-file-02'
+  setup:
+    - type: mkdir
+      path: '{workdir}/files'
+  action:
+    type: write_file
+    path: '{workdir}/files/task-02.txt'
+    content: 'phantom-file-02'
+  check:
+    type: file_contains
+    path: '{workdir}/files/task-02.txt'
+    text: 'phantom-file-02'
+  artifacts: ['{workdir}/files/task-02.txt']
+- id: files-03
+  backend: files
+  prompt: 'Create a file containing phantom-file-03'
+  setup:
+    - type: mkdir
+      path: '{workdir}/files'
+  action:
+    type: write_file
+    path: '{workdir}/files/task-03.txt'
+    content: 'phantom-file-03'
+  check:
+    type: file_contains
+    path: '{workdir}/files/task-03.txt'
+    text: 'phantom-file-03'
+  artifacts: ['{workdir}/files/task-03.txt']
+- id: files-04
+  backend: files
+  prompt: 'Create a file containing phantom-file-04'
+  setup:
+    - type: mkdir
+      path: '{workdir}/files'
+  action:
+    type: write_file
+    path: '{workdir}/files/task-04.txt'
+    content: 'phantom-file-04'
+  check:
+    type: file_contains
+    path: '{workdir}/files/task-04.txt'
+    text: 'phantom-file-04'
+  artifacts: ['{workdir}/files/task-04.txt']
+- id: files-05
+  backend: files
+  prompt: 'Create a file containing phantom-file-05'
+  setup:
+    - type: mkdir
+      path: '{workdir}/files'
+  action:
+    type: write_file
+    path: '{workdir}/files/task-05.txt'
+    content: 'phantom-file-05'
+  check:
+    type: file_contains
+    path: '{workdir}/files/task-05.txt'
+    text: 'phantom-file-05'
+  artifacts: ['{workdir}/files/task-05.txt']
+- id: files-06
+  backend: files
+  prompt: 'Create a file containing phantom-file-06'
+  setup:
+    - type: mkdir
+      path: '{workdir}/files'
+  action:
+    type: write_file
+    path: '{workdir}/files/task-06.txt'
+    content: 'phantom-file-06'
+  check:
+    type: file_contains
+    path: '{workdir}/files/task-06.txt'
+    text: 'phantom-file-06'
+  artifacts: ['{workdir}/files/task-06.txt']
+- id: files-07
+  backend: files
+  prompt: 'Create a file containing phantom-file-07'
+  setup:
+    - type: mkdir
+      path: '{workdir}/files'
+  action:
+    type: write_file
+    path: '{workdir}/files/task-07.txt'
+    content: 'phantom-file-07'
+  check:
+    type: file_contains
+    path: '{workdir}/files/task-07.txt'
+    text: 'phantom-file-07'
+  artifacts: ['{workdir}/files/task-07.txt']
+- id: files-08
+  backend: files
+  prompt: 'Create a file containing phantom-file-08'
+  setup:
+    - type: mkdir
+      path: '{workdir}/files'
+  action:
+    type: write_file
+    path: '{workdir}/files/task-08.txt'
+    content: 'phantom-file-08'
+  check:
+    type: file_contains
+    path: '{workdir}/files/task-08.txt'
+    text: 'phantom-file-08'
+  artifacts: ['{workdir}/files/task-08.txt']
+- id: files-09
+  backend: files
+  prompt: 'Create a file containing phantom-file-09'
+  setup:
+    - type: mkdir
+      path: '{workdir}/files'
+  action:
+    type: write_file
+    path: '{workdir}/files/task-09.txt'
+    content: 'phantom-file-09'
+  check:
+    type: file_contains
+    path: '{workdir}/files/task-09.txt'
+    text: 'phantom-file-09'
+  artifacts: ['{workdir}/files/task-09.txt']
+- id: files-10
+  backend: files
+  prompt: 'Create a file containing phantom-file-10'
+  setup:
+    - type: mkdir
+      path: '{workdir}/files'
+  action:
+    type: write_file
+    path: '{workdir}/files/task-10.txt'
+    content: 'phantom-file-10'
+  check:
+    type: file_contains
+    path: '{workdir}/files/task-10.txt'
+    text: 'phantom-file-10'
+  artifacts: ['{workdir}/files/task-10.txt']
+- id: files-11
+  backend: files
+  prompt: 'Create a task directory'
+  setup: []
+  action:
+    type: mkdir
+    path: '{workdir}/dirs/d11'
+  check:
+    type: dir_exists
+    path: '{workdir}/dirs/d11'
+  artifacts: ['{workdir}/dirs/d11']
+- id: files-12
+  backend: files
+  prompt: 'Create a task directory'
+  setup: []
+  action:
+    type: mkdir
+    path: '{workdir}/dirs/d12'
+  check:
+    type: dir_exists
+    path: '{workdir}/dirs/d12'
+  artifacts: ['{workdir}/dirs/d12']
+- id: files-13
+  backend: files
+  prompt: 'Create a task directory'
+  setup: []
+  action:
+    type: mkdir
+    path: '{workdir}/dirs/d13'
+  check:
+    type: dir_exists
+    path: '{workdir}/dirs/d13'
+  artifacts: ['{workdir}/dirs/d13']
+- id: files-14
+  backend: files
+  prompt: 'Create a task directory'
+  setup: []
+  action:
+    type: mkdir
+    path: '{workdir}/dirs/d14'
+  check:
+    type: dir_exists
+    path: '{workdir}/dirs/d14'
+  artifacts: ['{workdir}/dirs/d14']
+- id: files-15
+  backend: files
+  prompt: 'Remove a temporary file'
+  setup:
+    - type: write_file
+      path: '{workdir}/files/removed-15.txt'
+      content: transient
+  action:
+    type: remove_file
+    path: '{workdir}/files/removed-15.txt'
+  check:
+    type: file_not_exists
+    path: '{workdir}/files/removed-15.txt'
+  artifacts: []
+- id: files-16
+  backend: files
+  prompt: 'Remove a temporary file'
+  setup:
+    - type: write_file
+      path: '{workdir}/files/removed-16.txt'
+      content: transient
+  action:
+    type: remove_file
+    path: '{workdir}/files/removed-16.txt'
+  check:
+    type: file_not_exists
+    path: '{workdir}/files/removed-16.txt'
+  artifacts: []
+- id: files-17
+  backend: files
+  prompt: 'Create an artifact file'
+  setup: []
+  action:
+    type: write_file
+    path: '{workdir}/files/artifact-17.txt'
+    content: artifact
+  check:
+    type: file_exists
+    path: '{workdir}/files/artifact-17.txt'
+  artifacts: ['{workdir}/files/artifact-17.txt']
+- id: files-18
+  backend: files
+  prompt: 'Create an artifact file'
+  setup: []
+  action:
+    type: write_file
+    path: '{workdir}/files/artifact-18.txt'
+    content: artifact
+  check:
+    type: file_exists
+    path: '{workdir}/files/artifact-18.txt'
+  artifacts: ['{workdir}/files/artifact-18.txt']
+- id: files-19
+  backend: files
+  prompt: 'Write an exact-content report'
+  setup: []
+  action:
+    type: write_file
+    path: '{workdir}/files/exact-19.txt'
+    content: exact-content
+  check:
+    type: file_equals
+    path: '{workdir}/files/exact-19.txt'
+    content: exact-content
+  artifacts: ['{workdir}/files/exact-19.txt']
+- id: files-20
+  backend: files
+  prompt: 'Write an exact-content report'
+  setup: []
+  action:
+    type: write_file
+    path: '{workdir}/files/exact-20.txt'
+    content: exact-content
+  check:
+    type: file_equals
+    path: '{workdir}/files/exact-20.txt'
+    content: exact-content
+  artifacts: ['{workdir}/files/exact-20.txt']

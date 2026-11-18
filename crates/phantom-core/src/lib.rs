@@ -4,6 +4,7 @@
 //! enforcement) lives in sibling modules added in later phases.
 pub mod agent;
 pub mod approval;
+pub mod bench;
 pub mod client;
 pub mod config;
 pub mod error;
