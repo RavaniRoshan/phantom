@@ -2,7 +2,7 @@
   "id": "ghact9",
   "slug": "product-ready-github-actions-ghact9",
   "objective": "Use GitHub Actions to close the remaining external validation gates, then build and deploy a product-oriented showcase/landing page plus combined documentation site (Blume framework/theme), commit, push, and deploy via GitHub Pages.",
-  "status": "active",
+  "status": "complete",
   "branch": "goal/product-ready-github-actions-ghact9",
   "scope": "whole repository (Windows-first Rust + Python agent)",
   "scope_lock": ["crates/", "python/", "proto/", "docs/", "research/"],
@@ -42,16 +42,18 @@
     {"id": 4, "desc": "DONE: downloaded artifact, verified 1024x768 non-black PNG, wrote github-actions-capture.md.", "status": "done"},
     {"id": 5, "desc": "DONE: added test_gh_evidence + test_release_gate_evidence; 4 tests pass; verify-all extended to 63 Python tests.", "status": "done"},
     {"id": 6, "desc": "DONE: release-gates.md updated with run 44296179855 evidence, still honest (do not ship).", "status": "done"},
-    {"id": 7, "desc": "Research/identify Blume framework; choose docs generator + custom Blume theme; document the decision.", "status": "todo"},
-    {"id": 8, "desc": "Build product-oriented showcase + landing page + combined docs site (high-agency-grade visual design).", "status": "todo"},
-    {"id": 9, "desc": "Add GitHub Pages deployment workflow; commit, push, verify live site.", "status": "todo"}
+    {"id": 7, "desc": "DONE: BLUME verified as real MIT Astro docs framework v2.2.7; used with dark gloom theme + Orama search + agent discovery.", "status": "done"},
+    {"id": 8, "desc": "DONE: site/ Blume project with product landing page, 11 docs pages, logo/theme/capture asset; npm run build passes.", "status": "done"},
+    {"id": 9, "desc": "DONE: Pages enabled via API, deploy workflow fixed (Node 24 + npm install), all routes verified HTTP 200 on GitHub Pages.", "status": "done"}
   ],
-  "current_task": 7,
-  "iterations": 5,
+  "current_task": 9,
+  "iterations": 12,
   "budget_used": 0,
   "max_iterations": 50,
   "negative_knowledge": [],
   "context_summary": "Goal created after confirming GitHub access: origin git@github.com:RavaniRoshan/phantom.git, gh authenticated as RavaniRoshan (repo scope), public repo. Local workflows windows-gui-golden.yml and release.yml exist but are not yet pushed, hence not visible in gh workflow list. AWS EC2 remains externally blocked; GitHub Actions is the active path.",
   "created_at": "2026-11-18T12:00:00Z",
-  "updated_at": "2026-11-18T12:00:00Z"
+  "updated_at": "2026-11-18T13:00:00Z",
+  "completed_at": "2026-11-18T13:00:00Z",
+  "final_iterations": 12
 }
