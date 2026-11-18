@@ -50,6 +50,15 @@ result; the release workflow is `.github/workflows/release.yml`. Signing needs
 SignPath/Artifact Signing secrets — without them the NSIS installer is still
 buildable but Windows SmartScreen will warn on first install.
 
+### Verified on bare Windows
+
+`scripts/install-local.ps1` was run on the development machine (Windows 11
+Home). Result: all binaries including `Phantom.exe` (GUI) installed into
+`%LOCALAPPDATA%\Phantom`, the staged sidecar ran from the installed `python/`
+folder, the `PhantomDaemon` scheduled task was `Ready`, and both the control
+plane (`127.0.0.1:4546`) and the LLM service (`127.0.0.1:50051`) were listening
+after startup. The daemon process path was the installed copy, not the repo.
+
 ## Background execution
 
 Background mode uses the **invisible Windows desktop** (`CreateDesktop` in
