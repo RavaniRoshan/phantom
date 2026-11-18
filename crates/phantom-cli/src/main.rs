@@ -45,25 +45,27 @@ async fn main() -> Result<()> {
     // enqueues uncertain actions) and the TUI (which resolves them).
     let approval = ApprovalQueue::new();
 
-    // Connect and build the agent. If the Python service isn't up yet, start the
-    // TUI anyway and surface a warning when the user submits a task.
-    let agent = match PhantomClient::connect(&config.grpc_endpoint).await {
-        Ok(client) => {
-            let mut a = Agent::new(config.clone(), client);
-            // Attach the HITL approval queue so the Phase D confidence gate
-            // can pause uncertain actions for the operator to approve.
-            a.set_approval_queue(Some(approval.clone()));
-            Some(a)
-        }
+    // Connect once. The client is kept by the TUI so each submitted task gets
+    // a FRESH Agent with its own browser/desktop state (W0.14). If the Python
+    // service isn't up yet, start the TUI anyway and warn on task submission.
+    let client = match PhantomClient::connect(&config.grpc_endpoint).await {
+        Ok(c) => Some(c),
         Err(e) => {
             tracing::warn!("LLM service at {} unreachable: {e}", config.grpc_endpoint);
             None
         }
     };
+    let agent = client.as_ref().map(|c| {
+        let mut a = Agent::new(config.clone(), c.clone());
+        a.set_approval_queue(Some(approval.clone()));
+        a
+    });
 
     // Enter raw mode + alternate screen and run the app.
     let mut terminal = tui::init_terminal()?;
-    let result = tui::App::new(config, agent, Some(approval.clone())).run(&mut terminal).await;
+    let result = tui::App::new(config, agent, client, Some(approval.clone()))
+        .run(&mut terminal)
+        .await;
     tui::restore_terminal(&mut terminal)?;
 
     if let Err(e) = result {

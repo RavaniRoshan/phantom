@@ -65,6 +65,10 @@ pub struct Config {
     /// Paired with the service-side fallback (a provider that omits confidence
     /// reports ~0.85), so the gate never blocks the whole loop by default.
     pub confidence_gate: f32,
+    /// Wall-clock timeout for a single decision RPC or shell command (W0.10).
+    pub step_timeout_secs: u64,
+    /// Maximum bytes of command output returned to the model (W0.10).
+    pub max_output_bytes: usize,
 }
 
 impl Default for Config {
@@ -80,6 +84,8 @@ impl Default for Config {
             max_iterations: 25,
             max_parallel_workers: 4,
             confidence_gate: 0.70,
+            step_timeout_secs: 30,
+            max_output_bytes: 64 * 1024,
         }
     }
 }
@@ -168,6 +174,12 @@ impl Config {
         }
         if self.max_parallel_workers == 0 {
             self.max_parallel_workers = 4;
+        }
+        if self.step_timeout_secs == 0 {
+            self.step_timeout_secs = 30;
+        }
+        if self.max_output_bytes == 0 {
+            self.max_output_bytes = 64 * 1024;
         }
         // Clamp the autonomy gate into [0, 1]; out-of-range means "disabled".
         if !self.confidence_gate.is_finite() {

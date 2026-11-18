@@ -7,6 +7,8 @@ pub enum Command {
     Safe,
     Hero,
     Clear,
+    /// Show the visible task list with per-task status (W0.14).
+    Tasks,
     Quit,
     Provider(String),
     Mode(String),
@@ -31,6 +33,7 @@ pub fn parse_command(raw: &str) -> Command {
         "safe" => Command::Safe,
         "hero" => Command::Hero,
         "clear" => Command::Clear,
+        "tasks" => Command::Tasks,
         "quit" | "exit" => Command::Quit,
         "provider" if !arg.is_empty() => Command::Provider(arg),
         "mode" if !arg.is_empty() => Command::Mode(arg),
@@ -48,6 +51,7 @@ mod tests {
         assert_eq!(parse_command("/safe"), Command::Safe);
         assert_eq!(parse_command("/hero"), Command::Hero);
         assert_eq!(parse_command("/clear"), Command::Clear);
+        assert_eq!(parse_command("/tasks"), Command::Tasks);
         assert_eq!(parse_command("/quit"), Command::Quit);
         assert_eq!(parse_command("/provider openai"), Command::Provider("openai".into()));
         assert_eq!(parse_command("/mode hero"), Command::Mode("hero".into()));

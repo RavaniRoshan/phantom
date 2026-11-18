@@ -10,8 +10,10 @@ use phantom_fs;
 use phantom_proto::{ActionHistory, ActionRequest, ActionResponse, ThinkingChunk};
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 /// Outcome of executing one action against a backend.
 struct StepOutcome {
@@ -57,6 +59,8 @@ pub struct Agent {
     /// of executing. `None` (daemon, swarm workers) means no human is in
     /// the loop, so uncertain actions are skipped rather than hung.
     approval: Option<ApprovalQueue>,
+    /// W0.10: cooperative cancellation shared with backends (shell commands).
+    cancel: CancellationToken,
 }
 
 impl Agent {
@@ -71,7 +75,17 @@ impl Agent {
             desktop: Arc::new(Mutex::new(None)),
             desktop_name: "PhantomDesktop".to_string(),
             approval: None,
+            cancel: CancellationToken::new(),
         }
+    }
+
+    /// Cancel the running task. Honoured at the next await point (< 2 s).
+    pub fn cancel(&self) {
+        self.cancel.cancel();
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancel.is_cancelled()
     }
 
     /// Set the hidden-desktop name this agent will create/drive. Used by the
@@ -131,6 +145,10 @@ impl Agent {
         let mut iterations = 0u32;
 
         loop {
+            if self.cancel.is_cancelled() {
+                tx.send(AgentEvent::Error("task cancelled".to_string())).await.ok();
+                return Ok(RunOutcome::Cancelled { steps: iterations });
+            }
             if iterations >= self.config.max_iterations {
                 let reason = format!("reached max iterations ({})", self.config.max_iterations);
                 tx.send(AgentEvent::Error(reason.clone())).await.ok();
@@ -165,12 +183,31 @@ impl Agent {
             // base streaming fallback, doubling cost and latency per step. We
             // now stream a local Thinking chunk derived from the single decision
             // so the shown reasoning always matches the executed action.
-            let action: ActionResponse = match self.client.decide_action(req).await {
-                Ok(a) => a,
-                Err(e) => {
-                    tx.send(AgentEvent::Error(format!("decide failed: {e}"))).await.ok();
-                    return Err(anyhow::anyhow!("decide failed: {e}"));
+            // W0.10: the decision RPC is bounded by a timeout and cancellable;
+            // a timeout is a retryable failure, cancellation is a clean outcome.
+            let action: ActionResponse = tokio::select! {
+                _ = self.cancel.cancelled() => {
+                    tx.send(AgentEvent::Error("task cancelled".to_string())).await.ok();
+                    return Ok(RunOutcome::Cancelled { steps: iterations });
                 }
+                res = tokio::time::timeout(
+                    Duration::from_secs(self.config.step_timeout_secs),
+                    self.client.decide_action(req),
+                ) => match res {
+                    Ok(Ok(a)) => a,
+                    Ok(Err(e)) => {
+                        tx.send(AgentEvent::Error(format!("decide failed: {e}"))).await.ok();
+                        return Err(anyhow::anyhow!("decide failed: {e}"));
+                    }
+                    Err(_) => {
+                        let msg = format!(
+                            "decide timed out after {}s (retryable)",
+                            self.config.step_timeout_secs
+                        );
+                        tx.send(AgentEvent::Error(msg.clone())).await.ok();
+                        return Err(anyhow::anyhow!(msg));
+                    }
+                },
             };
             let thinking = if action.reasoning.is_empty() {
                 format!("Next: [{}] {}", action.action_type, action.action)
@@ -523,7 +560,13 @@ impl Agent {
             .or_else(|| action.params.get("cmd"))
             .map(String::as_str)
             .unwrap_or("");
-        match phantom_fs::powershell::run_command(cmd).await {
+        match phantom_fs::powershell::run_command(
+            cmd,
+            Duration::from_secs(self.config.step_timeout_secs),
+            self.cancel.clone(),
+        )
+        .await
+        {
             Ok(out) => StepOutcome {
                 screenshot: None,
                 context: out.clone(),
