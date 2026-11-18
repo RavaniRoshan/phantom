@@ -1,0 +1,74 @@
+---
+title: Hand-written API pages
+description: Document an endpoint in MDX, without a spec, and still get the method and path, a Try it panel, request samples, and pinned examples.
+---
+
+Not every API has an OpenAPI spec, and some endpoints read better written by hand. A page with `api` frontmatter documents one endpoint: its [fields](/docs/content/components#api-fields) describe the request and response, and Blume builds the rest of an [OpenAPI reference](/docs/references/openapi) page from them: the method and path at the top, a Try it panel and request samples in a column beside the content, and any [request and response examples](/docs/content/components#request-and-response-examples) pinned under them.
+
+````mdx docs/users/create.mdx lineNumbers
+---
+title: Create a user
+api: POST /workspaces/{workspaceId}/users
+---
+
+Creates a user and sends them an invite.
+
+<ParamField path="workspaceId" type="string" required>
+  The workspace to add the user to.
+</ParamField>
+
+<ParamField body="email" type="string" required placeholder="ada@example.com">
+  The user's email address.
+</ParamField>
+
+<ParamField body="role" type="string" default="member">
+  One of `owner`, `admin`, or `member`.
+</ParamField>
+
+<ResponseField name="id" type="string" required>
+  The new user's ID.
+</ResponseField>
+
+<ResponseExample>
+
+```json 201
+{ "id": "usr_8f2k", "status": "invited" }
+```
+
+</ResponseExample>
+````
+
+`api` takes an HTTP method and a path or a full URL. Path parameters are written in braces, `{workspaceId}`, and filled from the matching `path` field. A full URL, like `GET https://api.acme.com/v1/users`, is sent to as written; a path joins the site's [`api.server`](#site-defaults).
+
+## The playground and samples
+
+The page's `ParamField`s become the Try it panel's inputs, the way an operation's parameters do in a spec: `path`, `query`, and `header` fields are parameters, and `body` fields make up a JSON body, with a field's nested fields (inside its [`Expandable`](/docs/content/components#expandable)) as the properties of an object. A `type` of `string[]` is an array, and one that isn't a JSON type, such as `enum<string>`, is sent as a string. A field's `default` fills the body, and its `placeholder` is the example value the samples show. An optional body field with neither starts empty and stays out of the request until the reader fills it in.
+
+Beside the panel, the page gets request samples in cURL, JavaScript, and Python. A page with its own `RequestExample` shows that in their place.
+
+Two more frontmatter keys tune the page:
+
+- `authMethod` sets how the endpoint authenticates: `bearer`, `basic`, `key` (an API key in a header), or `none`. It overrides the site's [`api.auth`](#site-defaults).
+- `playground` sets what the page shows: `interactive` (the default) for the Try it panel and samples, `simple` for the samples only, or `none` for neither. The method, path, and any examples stay.
+
+## Site defaults
+
+`api` in `blume.config.ts` sets what every endpoint page shares:
+
+```ts blume.config.ts lineNumbers
+export default defineConfig({
+  api: {
+    server: "https://api.acme.com/v1",
+    auth: { method: "key", name: "x-api-key" },
+    playground: { proxy: true },
+  },
+});
+```
+
+- `server` is the base URL an `api` path joins.
+- `auth` is how requests authenticate unless a page sets `authMethod`: `method` is `bearer`, `basic`, `key`, or `none`, and `name` is the header an API key goes in (`x-api-key` by default). Without `auth`, pages send no credentials.
+- `playground` takes the same values as an OpenAPI reference's [playground option](/docs/references/openapi#try-it-playground): `false` hides the Try it panel on every page, and `proxy` sends its requests through a CORS proxy, a URL of your own or `true` for Blume's built-in one. The built-in proxy needs [server output](/docs/deployment#server-rendering), and only forwards to `server`'s origin and the origins of any full URLs in `api` frontmatter.
+
+The page's layout, fields, and examples are the same components as elsewhere, so the [Markdown copy](/docs/discoverability/llms-txt) of the page lists each field, and search indexes the page like any other.
+
+The frontmatter keys and component props match Mintlify's, so pages written for it keep working as they are.

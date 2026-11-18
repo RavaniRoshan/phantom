@@ -57,20 +57,25 @@ impl Sandbox {
 /// `root`. Call before any mutating file operation in Safe mode.
 pub fn canonicalize_within(root: &Path, path: &Path) -> Result<PathBuf> {
     let root_norm = normalize(root);
-    let candidate = if path.exists() {
-        strip_verbatim(std::fs::canonicalize(path).map_err(|e| {
-            FsError::Security(format!("cannot resolve {}: {e}", path.display()))
-        })?)
-    } else {
-        normalize(path)
-    };
+    // Resolve the root first: on Windows `temp_dir()` can be an 8.3 short path
+    // while canonicalize() returns the long path. Building the candidate from
+    // the canonical root keeps both sides comparable.
     let root_real = if root.exists() {
         strip_verbatim(
             std::fs::canonicalize(root)
                 .map_err(|e| FsError::Security(format!("cannot resolve root: {e}")))?,
         )
     } else {
-        root_norm
+        root_norm.clone()
+    };
+    let candidate = if path.exists() {
+        strip_verbatim(std::fs::canonicalize(path).map_err(|e| {
+            FsError::Security(format!("cannot resolve {}: {e}", path.display()))
+        })?)
+    } else if let Ok(rel) = path.strip_prefix(&root_norm) {
+        normalize(&root_real.join(rel))
+    } else {
+        normalize(path)
     };
     if candidate.starts_with(&root_real) {
         Ok(candidate)

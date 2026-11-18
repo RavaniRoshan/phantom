@@ -4,7 +4,16 @@
   "version": "0.1.0",
   "identifier": "com.phantom.desktop",
   "build": {
-    "frontendDist": "frontend"
+    "frontendDist": "frontend",
+    "beforeDevCommand": {
+      "script": "npm run dev -- --host 127.0.0.1",
+      "cwd": "../../../frontend-src",
+      "wait": false
+    },
+    "beforeBuildCommand": {
+      "script": "npm run build",
+      "cwd": "../../../frontend-src"
+    }
   },
   "app": {
     "windows": [

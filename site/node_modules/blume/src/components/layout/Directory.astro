@@ -1,0 +1,94 @@
+---
+import AccordionItem from "../content/AccordionItem.astro";
+import Card from "../content/Card.astro";
+import CardGroup from "../content/CardGroup.astro";
+import Icon from "../Icon.astro";
+import { directoryEntries } from "./nav-utils.ts";
+import type { NavGroup } from "./nav-utils.ts";
+
+/**
+ * A group page's directory: the group's other pages listed below the page's
+ * content, as cards or as an accordion whose subgroups open to their pages
+ * (the group's `directory`, see `core/schema.ts`).
+ */
+interface Props {
+  group: NavGroup;
+}
+
+const { group } = Astro.props;
+const entries = directoryEntries(group);
+---
+
+{
+  entries.length > 0 && (
+    <nav
+      aria-label={group.label}
+      class="mx-auto mt-6 max-w-content"
+      data-blume-directory={group.directory}
+    >
+      {group.directory === "card" ? (
+        <CardGroup>
+          {entries.map((entry) => (
+            <Card href={entry.href} icon={entry.icon} title={entry.label}>
+              {entry.description}
+            </Card>
+          ))}
+        </CardGroup>
+      ) : (
+        <div class="not-prose my-6 divide-y divide-border overflow-hidden rounded-blume border border-border">
+          {entries.map((entry, index) =>
+            entry.pages ? (
+              <AccordionItem
+                description={entry.description}
+                icon={entry.icon}
+                id={`blume-directory-${index + 1}`}
+                title={entry.label}
+              >
+                <ul class="grid gap-2 text-sm">
+                  {entry.pages.map((page) => (
+                    <li>
+                      <a
+                        class="text-muted-foreground no-underline transition-colors hover:text-foreground"
+                        href={page.route}
+                      >
+                        {page.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </AccordionItem>
+            ) : (
+              <a
+                class="flex items-center justify-between gap-4 p-4 font-medium text-foreground no-underline transition-colors hover:bg-muted/40"
+                href={entry.href}
+              >
+                <span class="flex items-start gap-2">
+                  {entry.icon && (
+                    <Icon
+                      class="mt-0.5 shrink-0 text-muted-foreground"
+                      name={entry.icon}
+                      size={16}
+                    />
+                  )}
+                  <span>
+                    <span class="block">{entry.label}</span>
+                    {entry.description && (
+                      <span class="block font-normal text-muted-foreground text-sm">
+                        {entry.description}
+                      </span>
+                    )}
+                  </span>
+                </span>
+                <Icon
+                  class="shrink-0 text-muted-foreground rtl:-scale-x-100"
+                  name="arrow-right"
+                  size={16}
+                />
+              </a>
+            )
+          )}
+        </div>
+      )}
+    </nav>
+  )
+}

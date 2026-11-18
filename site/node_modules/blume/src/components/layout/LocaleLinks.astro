@@ -1,0 +1,42 @@
+---
+import data from "blume:data";
+
+import { normalizeBasePath } from "../../core/base-path.ts";
+import { localePrefix } from "../../core/i18n.ts";
+import {
+  localizeContentLinks,
+  localizeHref,
+  routeSetFor,
+} from "../../core/locale-links.ts";
+
+/**
+ * Keep a translated page's content links inside the reader's locale. Content
+ * is compiled once per file, so its `<a href>`s point at the default locale's
+ * routes; rendered under `/fr/…` (a real translation, a fallback page, or a
+ * shared `page.$.mdx`), each root-relative page link moves to `/fr/…` when
+ * that route is served, and keeps its authored target otherwise. Default-locale
+ * pages (no prefix) and single-locale sites pass the slot through untouched.
+ */
+interface Props {
+  /** Locale of the route being rendered — a fallback route's own, not its content's. */
+  locale: string;
+}
+
+const { locale } = Astro.props;
+const i18n = data.config.i18n;
+
+const html =
+  i18n && localePrefix(locale, i18n) !== ""
+    ? localizeContentLinks(await Astro.slots.render("default"), (href) =>
+        localizeHref(href, {
+          basePath: data.config.basePath,
+          deployBase: normalizeBasePath(import.meta.env.BASE_URL),
+          i18n,
+          locale,
+          routes: routeSetFor(data.routes),
+        })
+      )
+    : null;
+---
+
+{html === null ? <slot /> : <Fragment set:html={html} />}

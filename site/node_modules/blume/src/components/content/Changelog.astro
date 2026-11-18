@@ -1,0 +1,189 @@
+---
+// The changelog index's release list: every visible `type: changelog` entry,
+// newest first, grouped by year, each row linking to its own page.
+//
+// The generated `/changelog` page renders this, and so can a hand-written page
+// that wants prose above the list — an introduction, a feed link — which the
+// generated page has no slot for. Only the list lives here: the heading and the
+// description belong to whoever owns the page, so an authored page writes its
+// own and the generated page keeps the translatable `changelog` strings.
+import { getCollection } from "astro:content";
+import data from "blume:data";
+
+import {
+  compareChangelogDates,
+  groupChangelogYears,
+  parseChangelogDate,
+  uniqueAnchorIds,
+} from "../../core/changelog-list.ts";
+import { resolveDateFormatOptions } from "../../core/date-format.ts";
+import { withMountedBase } from "../islands/base-path.ts";
+import { contentStrings } from "./content-strings.ts";
+
+const i18n = data.config.i18n;
+// The list is always the default locale's entries, whatever locale the page
+// sits in. Every other surface that publishes this list already works that way
+// — the generated page, the `/changelog.md` mirror, llms-full.txt, MCP
+// `get_page`, search — so a translated page listing its own locale's entries
+// would be the one surface disagreeing with the rest about which releases
+// exist. Releases are also commonly written once and left untranslated, in
+// which case a per-locale list is the same list with fallback copies anyway.
+// (The chrome around it still follows the reader: `strings` and the dates.)
+const locale = i18n ? i18n.defaultLocale : null;
+const { changelog: strings } = contentStrings(data, Astro.currentLocale);
+// The page's own language, for the row dates and year headings. On the
+// unprefixed generated `/changelog` Astro resolves the default locale.
+const readerLocale = i18n ? (Astro.currentLocale ?? i18n.defaultLocale) : "en";
+
+const dateFormatOptions = resolveDateFormatOptions(data.config.dateFormat);
+// The year heads each group, so a row shows the rest of the date: a preset
+// style keeps its month wording, a component format simply drops the year.
+const { dateStyle, year: _year, ...dateComponents } = dateFormatOptions;
+const rowDateFormat: Intl.DateTimeFormatOptions = dateStyle
+  ? {
+      ...dateComponents,
+      day: "numeric",
+      // `medium` abbreviates the month; every other preset spells it out, so a
+      // `long` site keeps reading "October 5" rather than dropping to "Oct 5".
+      month: dateStyle === "medium" ? "short" : "long",
+    }
+  : dateComponents;
+const formatRowDate = (date: Date) =>
+  new Intl.DateTimeFormat(readerLocale, rowDateFormat).format(date);
+const formatYear = (date: Date) =>
+  new Intl.DateTimeFormat(readerLocale, {
+    timeZone: dateFormatOptions.timeZone,
+    year: "numeric",
+  }).format(date);
+
+const slugify = (text: string) =>
+  text
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/gu, "-")
+    .replaceAll(/^-+|-+$/gu, "") || "update";
+
+// Map each entry to its own page. The collection entry id matches the route
+// manifest's `entryId`, and the manifest carries a route per locale and per
+// archived version, all sharing that id — so a map over every route would keep
+// whichever came last: a Portuguese permalink on an unlocalized index, or a
+// row pointing into last year's archived docs. Keep the current docs of the
+// listed locale, never a fallback copy (which renders another locale's content
+// at this URL), and list an entry only when it has such a route, so a
+// translated changelog file does not add a second row for the same release.
+// These are the conditions `ai/changelog-markdown.ts` filters pages by, so the
+// rendered list and the Markdown mirror select the same releases.
+//
+// Keyed by collection and id together, the way the catch-all looks an entry up:
+// both collections id an entry by its file path, so a `releases/v1-0-0.md` on
+// disk and a staged release from a source named `releases` share an id while
+// rendering at different routes.
+const entryKey = (collection: string, id: string) => `${collection}:${id}`;
+const routeByEntry = new Map<string, string>();
+for (const route of data.routes) {
+  if (
+    route.version === "" &&
+    !route.fallback &&
+    (locale === null || route.locale === locale)
+  ) {
+    routeByEntry.set(entryKey(route.collection, route.entryId), route.path);
+  }
+}
+
+// Non-filesystem changelog sources (GitHub Releases) render through a parallel
+// `staged` collection, which exists only when such a source is configured — the
+// route manifest says whether to look, so the index folds those releases in
+// without a generator flag, and a page that reads only `docs` can't quietly
+// drop them.
+const hasStaged = data.routes.some((route) => route.collection === "staged");
+const entries = [
+  ...(await getCollection("docs")),
+  ...(hasStaged ? await getCollection("staged" as "docs") : []),
+].filter(
+  (entry) =>
+    entry.data.type === "changelog" &&
+    !entry.data.draft &&
+    !entry.data.sidebar?.hidden &&
+    // A route is required on every site, not only localized ones: without
+    // i18n the map still drops archived versions, and an entry with no
+    // current-docs route would otherwise be listed with a dead self-anchor
+    // while the Markdown mirror left it out.
+    routeByEntry.has(entryKey(entry.collection, entry.id))
+);
+
+const rows = entries
+  .map((entry) => {
+    const date = parseChangelogDate(entry.data.date ?? entry.data.changelog?.date);
+    const label =
+      entry.data.title ??
+      (entry.data.changelog?.version
+        ? `v${entry.data.changelog.version}`
+        : "Update");
+    const route = routeByEntry.get(entryKey(entry.collection, entry.id));
+    return {
+      date,
+      href: route ? withMountedBase(route) : null,
+      label,
+      tag: entry.data.changelog?.category ?? null,
+    };
+  })
+  .toSorted((a, b) => compareChangelogDates(a.date, b.date));
+
+const ids = uniqueAnchorIds(rows.map((row) => slugify(row.label)));
+const items = rows.map((row, index) => ({
+  date: row.date ? formatRowDate(row.date) : null,
+  dateTime: row.date ? row.date.toISOString().slice(0, 10) : null,
+  href: row.href,
+  id: ids[index] as string,
+  label: row.label,
+  tag: row.tag,
+  year: row.date ? formatYear(row.date) : null,
+}));
+
+const groups = groupChangelogYears(items, (item) => item.year);
+---
+
+{
+  items.length === 0 ? (
+    <p>{strings.empty}</p>
+  ) : (
+    <div class="not-prose mt-10 divide-y divide-border border-border border-y">
+      {groups.map((group) => (
+        <section
+          aria-label={group.year ?? undefined}
+          class="grid md:grid-cols-[6rem_minmax(0,1fr)] md:gap-x-8"
+        >
+          <h2 class="mt-0! pt-3! font-medium! text-muted-foreground text-sm! leading-5! tabular-nums max-md:pb-1">
+            {group.year}
+          </h2>
+          <ul class="m-0! list-none divide-y divide-border p-0!">
+            {group.items.map((item) => (
+              <li class="m-0! p-0!" id={item.id}>
+                <a
+                  class="group/release flex items-baseline gap-4 py-3 no-underline! hover:no-underline!"
+                  href={item.href ?? `#${item.id}`}
+                >
+                  <span class="min-w-0 flex-1 font-medium text-foreground text-sm transition-colors group-hover/release:text-accent">
+                    {item.label}
+                  </span>
+                  {item.tag && (
+                    <span class="shrink-0 rounded-full bg-muted px-2 py-0.5 font-medium text-[0.65rem] text-muted-foreground">
+                      {item.tag}
+                    </span>
+                  )}
+                  {item.date && (
+                    <time
+                      class="shrink-0 font-mono text-muted-foreground text-xs tabular-nums"
+                      datetime={item.dateTime}
+                    >
+                      {item.date}
+                    </time>
+                  )}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
+  )
+}

@@ -105,6 +105,10 @@ jobs:
   nvidia-e2e:
     name: NVIDIA NIM drives hidden desktop (full stack)
     runs-on: windows-latest
+    # Live third-party model endpoint. NIM retires models independently of this
+    # repo (the pinned vision model now returns HTTP 410), so this job reports
+    # but does not block merges. The offline mock full-stack test is the gate.
+    continue-on-error: true
     env:
       PHANTOM_PROVIDER: nvidia
       PHANTOM_API_KEY: ${{ secrets.NVIDIA_API_KEY }}

@@ -115,6 +115,8 @@ pub struct ControlState {
     artifacts_root: PathBuf,
     seq: AtomicU64,
     events: broadcast::Sender<ControlEvent>,
+    /// Daemon bridge: GUI submissions are forwarded to the engine queue.
+    task_tx: Mutex<Option<tokio::sync::mpsc::UnboundedSender<(String, String)>>>,
 }
 
 impl ControlState {
@@ -131,6 +133,7 @@ impl ControlState {
             artifacts_root: artifacts_root.into(),
             seq: AtomicU64::new(0),
             events,
+            task_tx: Mutex::new(None),
         }
     }
 
@@ -146,8 +149,12 @@ impl ControlState {
         self.events.subscribe()
     }
 
-    /// Submit a task. Returns `None` for a duplicate dedupe key.
-    pub fn submit(&self, req: SubmitTask) -> Result<Option<TaskRecord>, String> {
+    /// Connect GUI submissions to the daemon engine queue.
+    pub fn set_task_sender(&self, tx: tokio::sync::mpsc::UnboundedSender<(String, String)>) {
+        *self.task_tx.lock().unwrap() = Some(tx);
+    }
+
+    fn insert(&self, req: SubmitTask, forward: bool) -> Result<Option<TaskRecord>, String> {
         if req.prompt.trim().is_empty() {
             return Err("prompt must not be empty".into());
         }
@@ -166,8 +173,23 @@ impl ControlState {
             created_at: unix_now(),
         };
         self.tasks.lock().unwrap().insert(id.clone(), record.clone());
+        if forward {
+            if let Some(tx) = self.task_tx.lock().unwrap().as_ref() {
+                let _ = tx.send((id.clone(), req.prompt.clone()));
+            }
+        }
         self.emit(ControlEvent::TaskCreated { id, prompt: req.prompt });
         Ok(Some(record))
+    }
+
+    /// GUI submission: record and forward to the daemon engine.
+    pub fn submit(&self, req: SubmitTask) -> Result<Option<TaskRecord>, String> {
+        self.insert(req, true)
+    }
+
+    /// Engine-observed task: record only. Forwarding would create a feedback loop.
+    pub fn record_task(&self, req: SubmitTask) -> Result<Option<TaskRecord>, String> {
+        self.insert(req, false)
     }
 
     pub fn list(&self) -> Vec<TaskRecord> {

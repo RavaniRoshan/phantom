@@ -35,6 +35,9 @@ pub enum PhantomEvent {
     Webhook(WebhookPayload),
     /// A file appeared in the watched Inbox directory.
     FileDropped(PathBuf),
+    /// A task submitted through the GUI control plane. Keeps its control ID so
+    /// the engine's outcome updates the same record the UI is watching.
+    Control { id: String, prompt: String },
 }
 
 impl PhantomEvent {
@@ -56,6 +59,7 @@ impl PhantomEvent {
             PhantomEvent::FileDropped(path) => {
                 format!("Process the newly dropped file: {}", path.display())
             }
+            PhantomEvent::Control { prompt, .. } => prompt.clone(),
         }
     }
 }

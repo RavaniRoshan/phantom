@@ -4,11 +4,41 @@
 //! keep running when the window is closed. The tray keeps a lightweight handle.
 
 use phantom_control::{ApprovalDecision, Settings, SubmitTask, TaskRecord, VmStatus};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     Manager,
 };
+
+/// Everything the user can configure, owned by the app. The CLI and CI read
+/// the same file but never present these controls to an end user.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+struct AppSettings {
+    provider: String,
+    model: String,
+    mode: String,
+    max_iterations: u32,
+    llm_endpoint: String,
+    confidence_gate: f32,
+    max_parallel_workers: u32,
+    key_configured: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            provider: "claude".into(),
+            model: String::new(),
+            mode: "safe".into(),
+            max_iterations: 25,
+            llm_endpoint: String::new(),
+            confidence_gate: 0.70,
+            max_parallel_workers: 4,
+            key_configured: false,
+        }
+    }
+}
 
 static TOKEN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
@@ -104,6 +134,83 @@ async fn vm_status() -> Result<VmStatus, String> {
     call("GET", "/vm/status", None).await
 }
 
+/// First-run setup: is a provider key already stored in Credential Manager?
+#[tauri::command]
+async fn has_api_key() -> Result<bool, String> {
+    match phantom_core::secrets::get_secret(phantom_core::secrets::API_KEY_TARGET) {
+        Ok(Some(value)) => Ok(!value.trim().is_empty()),
+        Ok(None) => Ok(false),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// First-run setup: store the provider key in Credential Manager. The key is
+/// never written to config.toml or logged; Python reads the same target.
+#[tauri::command]
+async fn set_api_key(key: String) -> Result<(), String> {
+    let key = key.trim();
+    if key.is_empty() {
+        return Err("API key is empty".into());
+    }
+    phantom_core::secrets::set_secret(phantom_core::secrets::API_KEY_TARGET, key)
+        .map_err(|e| e.to_string())
+}
+
+/// Remove the stored provider key (GUI "Clear key" action).
+#[tauri::command]
+async fn delete_api_key() -> Result<(), String> {
+    phantom_core::secrets::delete_secret(phantom_core::secrets::API_KEY_TARGET)
+        .map_err(|e| e.to_string())
+}
+
+/// Read the full user-facing config from the config file the daemon uses.
+#[tauri::command]
+async fn get_app_settings() -> Result<AppSettings, String> {
+    let cfg = phantom_core::Config::load(&phantom_core::Config::path()).map_err(|e| e.to_string())?;
+    let key_configured = matches!(
+        phantom_core::secrets::get_secret(phantom_core::secrets::API_KEY_TARGET),
+        Ok(Some(v)) if !v.trim().is_empty()
+    );
+    Ok(AppSettings {
+        provider: cfg.provider,
+        model: cfg.model,
+        mode: cfg.mode.to_string(),
+        max_iterations: cfg.max_iterations,
+        llm_endpoint: cfg.llm_endpoint,
+        confidence_gate: cfg.confidence_gate,
+        max_parallel_workers: cfg.max_parallel_workers,
+        key_configured,
+    })
+}
+
+/// Persist GUI settings to config.toml (the daemon's source of truth) and
+/// mirror the control-plane copy so it is visible immediately.
+#[tauri::command]
+async fn save_app_settings(settings: AppSettings) -> Result<(), String> {
+    let path = phantom_core::Config::path();
+    let mut cfg = phantom_core::Config::load(&path).map_err(|e| e.to_string())?;
+    cfg.provider = settings.provider.trim().to_string();
+    cfg.model = settings.model.trim().to_string();
+    cfg.mode = settings.mode.parse().map_err(|e: String| e)?;
+    if settings.max_iterations == 0 {
+        return Err("Max iterations must be greater than zero".into());
+    }
+    cfg.max_iterations = settings.max_iterations;
+    cfg.llm_endpoint = settings.llm_endpoint.trim().to_string();
+    cfg.confidence_gate = settings.confidence_gate.clamp(0.0, 1.0);
+    cfg.max_parallel_workers = settings.max_parallel_workers.max(1);
+    cfg.save(&path).map_err(|e| e.to_string())?;
+
+    let control = Settings {
+        provider: settings.provider,
+        model: settings.model,
+        mode: settings.mode,
+        max_iterations: settings.max_iterations,
+    };
+    call("PUT", "/settings", Some(serde_json::to_value(control).map_err(|e| e.to_string())?))
+        .await
+}
+
 fn main() {
     let token = phantom_control::load_or_create_token().expect("control token");
     let _ = TOKEN.set(token);
@@ -138,7 +245,12 @@ fn main() {
             resolve_approval,
             get_settings,
             set_settings,
-            vm_status
+            vm_status,
+            has_api_key,
+            set_api_key,
+            delete_api_key,
+            get_app_settings,
+            save_app_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running Phantom");

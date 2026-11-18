@@ -17,6 +17,12 @@ dist/
 python/phantom_pb2.py
 python/phantom_pb2_grpc.py
 
+# Node (desktop GUI frontend)
+frontend-src/node_modules/
+
+# Staged Python sidecar for the installed app
+build/sidecar/
+
 # Phantom runtime
 .phantom/
 *.log

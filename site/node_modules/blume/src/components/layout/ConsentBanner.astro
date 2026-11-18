@@ -1,0 +1,62 @@
+---
+import { EN_UI } from "../../core/i18n-ui.ts";
+import type { UIStrings } from "../../core/i18n-ui.ts";
+import { newTabAttrs } from "../../core/new-tab.ts";
+import { withBase } from "../islands/base-path.ts";
+
+// The `native()` consent banner: a card at the foot of the viewport asking to
+// use analytics cookies. It renders hidden, and the consent runtime
+// (`consent/client.ts`) shows it until the reader answers, stores the answer,
+// and shows it again from the footer's Cookie settings link. Accept and
+// Decline carry the same weight, so declining is as easy as accepting.
+interface Props {
+  /** The privacy policy link: a page route or a URL. */
+  policy?: string;
+  /** Localized banner labels. */
+  strings?: UIStrings["consent"];
+}
+
+const { policy, strings } = Astro.props;
+const c = { ...EN_UI.consent, ...strings };
+const buttonClass =
+  "flex-1 rounded-blume border border-border px-4 py-2 text-foreground text-sm transition-colors hover:border-foreground";
+---
+
+<div
+  aria-label={c.label}
+  class="fixed inset-x-4 bottom-4 z-50 rounded-blume border border-border bg-background p-4 shadow-lg sm:start-auto sm:end-4 sm:w-96"
+  data-blume-consent-banner
+  hidden
+  role="region"
+>
+  <p class="text-foreground text-sm">
+    {c.message}{" "}
+    {
+      policy && (
+        <a
+          class="text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
+          href={withBase(policy)}
+          {...newTabAttrs(policy)}
+        >
+          {c.policy}
+        </a>
+      )
+    }
+  </p>
+  <div class="mt-3 flex gap-2">
+    <button
+      class={buttonClass}
+      data-blume-consent-choice="decline"
+      type="button"
+    >
+      {c.decline}
+    </button>
+    <button
+      class={buttonClass}
+      data-blume-consent-choice="accept"
+      type="button"
+    >
+      {c.accept}
+    </button>
+  </div>
+</div>

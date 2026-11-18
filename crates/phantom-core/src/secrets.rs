@@ -69,6 +69,23 @@ pub fn set_secret(target: &str, value: &str) -> Result<()> {
         .map_err(|e| PhantomError::Config(format!("failed to store credential '{target}': {e}")))
 }
 
+/// Remove a credential. Used by first-run setup when a user clears a key.
+#[cfg(windows)]
+pub fn delete_secret(target: &str) -> Result<()> {
+    use windows::core::PCWSTR;
+    use windows::Win32::Security::Credentials::{CredDeleteW, CRED_TYPE_GENERIC};
+
+    let wide: Vec<u16> = target.encode_utf16().chain(std::iter::once(0)).collect();
+    // NotFound simply means there is nothing to clear.
+    unsafe { CredDeleteW(PCWSTR(wide.as_ptr()), CRED_TYPE_GENERIC, 0) }
+        .map_err(|e| PhantomError::Config(format!("failed to delete credential '{target}': {e}")))
+}
+
+#[cfg(not(windows))]
+pub fn delete_secret(_target: &str) -> Result<()> {
+    Ok(())
+}
+
 #[cfg(not(windows))]
 pub fn get_secret(target: &str) -> Result<Option<String>> {
     // CI-only fallback: env var named after the target, e.g.

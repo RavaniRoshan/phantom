@@ -34,8 +34,10 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Cargo check (all targets)
-        run: cargo check --all-targets
+      # phantom-app is Tauri/GTK and cannot be checked on this Linux runner
+      # (glib-2.0 is absent). The Windows job below covers the desktop shell.
+      - name: Cargo check (portable crates, all targets)
+        run: cargo check --all-targets --workspace --exclude phantom-app
 
       - name: Test portable Rust crates
         run: cargo test -p phantom-fs -p phantom-proto -p phantom-core

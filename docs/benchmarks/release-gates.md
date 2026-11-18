@@ -29,7 +29,7 @@ infrastructure or people not available here.
 
 | Gate | Target | Status | Evidence |
 |---|---|---|---|
-| 8-hour soak, 200 tasks | no leaks | ❌ BLOCKED | Needs a live VM host. |
+| 8-hour soak, 200 tasks | no leaks | ⚠️ PARTIAL | Accelerated offline mock soak passed on bare Windows: 200/200 tasks, 2.5% working-set growth (`local-soak.md`). The full 8-hour live-VM soak still needs a Hyper-V/Cloud PC host. |
 | Crash recovery | resume queued work | ⚠️ PARTIAL | RunStore + TaskQueue wired; full kill/resume soak not run. |
 | Cancellation < 2 s | honoured | ✅ VERIFIED | CancellationToken tests. |
 | p95 latency / cost capped | measured | ❌ NOT IMPLEMENTED | No dashboard. |
@@ -40,17 +40,23 @@ infrastructure or people not available here.
 |---|---|---|---|
 | One installer / icon | clean VM < 5 min | ⚠️ ARTIFACTS ONLY | Tauri NSIS config + signed release workflow; not built/signed here (secrets). |
 | First-run wizard | 5/5 unaided | ❌ BLOCKED | Screens exist in the app shell; no user testing. |
-| Task list / cancel / retry | visible | ✅ VERIFIED | Tauri GUI + control plane + TUI. |
+| Task list / cancel / retry | visible | ✅ VERIFIED | React/Space UI Tauri GUI + control plane + TUI; rendered GUI verified (`artifacts/gui-react-spaceui.png`). |
 | Notifications | 3 cases | ⚠️ PARTIAL | Typed notifications + sink; tray present; Windows toast not yet wired. |
 | Tray presence | present | ✅ VERIFIED | `TrayIconBuilder` in `crates/phantom-app`. |
 
 ## Verified local state
 
 `scripts/verify-all.ps1` is green: `cargo check --workspace --all-targets`,
-**92 Rust tests**, the 20-task deterministic golden harness, and **61 Python
+**92 Rust tests**, the 20-task deterministic golden harness, and **70 Python
 stdlib tests**. Storage: `docs/benchmarks/baseline.md`, `latest.json`, and
 `docs/benchmarks/github-actions-capture.md` (live 1024×768 non-black capture,
 run `44296179855`, conclusion `success`).
+
+Bare-Windows (real user machine, Windows 11 Home): `local-windows-validation.md`
+records the mock sidecar, full daemon task loop, live desktop capture
+(`artifacts/local-windows-capture.png`, 1536×864 non-black), local Edge browser
+smoke, and the 200-task soak. These prove real Windows execution, not VM
+isolation (Hyper-V/Sandbox unavailable on Home).
 
 ## Conclusion
 

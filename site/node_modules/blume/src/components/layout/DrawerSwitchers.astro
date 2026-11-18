@@ -1,0 +1,51 @@
+---
+// The header's selectors, version selector, and language switcher, as a row
+// at the top of the nav drawer. Below `lg` the sidebar is this drawer, and the
+// header has no room for them beside the logo, tabs, search, and icon
+// buttons, so it hides them whenever there's a drawer to open and this row
+// takes over; from `lg` up the row hides and the header shows them again.
+import type { UIStrings } from "../../core/i18n-ui.ts";
+import type {
+  LocaleSwitchOption,
+  NavSelector as NavSelectorConfig,
+} from "../../core/types.ts";
+import LanguageSwitcher from "./LanguageSwitcher.astro";
+import NavSelector from "./NavSelector.astro";
+
+interface Props {
+  selectors: NavSelectorConfig[];
+  versionSelector?: NavSelectorConfig | null;
+  localeSwitch?: LocaleSwitchOption[];
+  route: string;
+  switcherStrings?: UIStrings["languageSwitcher"];
+}
+
+const { selectors, versionSelector, localeSwitch, route, switcherStrings } =
+  Astro.props;
+const hasLocales = (localeSwitch?.length ?? 0) > 1;
+---
+
+{
+  (selectors.length > 0 || versionSelector || hasLocales) && (
+    <div class="mb-4 flex flex-col gap-2 border-border border-b pb-4 lg:hidden">
+      {selectors.map((selector) => (
+        <NavSelector route={route} selector={selector} variant="drawer" />
+      ))}
+      {versionSelector && (
+        <NavSelector
+          route={route}
+          selector={versionSelector}
+          variant="drawer"
+        />
+      )}
+      {localeSwitch && hasLocales && (
+        <LanguageSwitcher
+          label={switcherStrings?.label ?? "Language"}
+          options={localeSwitch}
+          untranslatedLabel={switcherStrings?.untranslated ?? "Not translated"}
+          variant="drawer"
+        />
+      )}
+    </div>
+  )
+}

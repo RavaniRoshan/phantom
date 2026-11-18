@@ -1,0 +1,80 @@
+{
+  "hash": "410a9858",
+  "configHash": "09b38086",
+  "lockfileHash": "5ff11aca",
+  "browserHash": "e6a37523",
+  "optimized": {
+    "astro > aria-query": {
+      "src": "../../../../../node_modules/aria-query/lib/index.js",
+      "file": "astro_n_aria-query.js",
+      "fileHash": "91f5439d",
+      "needsInterop": true
+    },
+    "astro > axobject-query": {
+      "src": "../../../../../node_modules/axobject-query/lib/index.js",
+      "file": "astro_n_axobject-query.js",
+      "fileHash": "bc2bb5af",
+      "needsInterop": true
+    },
+    "astro > html-escaper": {
+      "src": "../../../../../node_modules/html-escaper/esm/index.js",
+      "file": "astro_n_html-escaper.js",
+      "fileHash": "dd5f6885",
+      "needsInterop": false
+    },
+    "astro/runtime/client/dev-toolbar/entrypoint.js": {
+      "src": "../../../../../node_modules/astro/dist/runtime/client/dev-toolbar/entrypoint.js",
+      "file": "astro_runtime_client_dev-toolbar_entrypoint__js.js",
+      "fileHash": "0a9e97c0",
+      "needsInterop": false
+    },
+    "blume > @orama/orama": {
+      "src": "../../../../../node_modules/@orama/orama/dist/browser/index.js",
+      "file": "blume_n_@orama_orama.js",
+      "fileHash": "b459f7f1",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "astro-uWWomyxh": {
+      "file": "astro-uWWomyxh.js",
+      "isDynamicEntry": true
+    },
+    "audit-DC76zg4e": {
+      "file": "audit-DC76zg4e.js",
+      "isDynamicEntry": true
+    },
+    "highlight-DDBEcdXm": {
+      "file": "highlight-DDBEcdXm.js",
+      "isDynamicEntry": false
+    },
+    "icons-up915nNG": {
+      "file": "icons-up915nNG.js",
+      "isDynamicEntry": false
+    },
+    "rolldown-runtime-C-UrYobY": {
+      "file": "rolldown-runtime-C-UrYobY.js",
+      "isDynamicEntry": false
+    },
+    "settings-CO7HgVN8": {
+      "file": "settings-CO7HgVN8.js",
+      "isDynamicEntry": true
+    },
+    "toolbar--72C0u4u": {
+      "file": "toolbar--72C0u4u.js",
+      "isDynamicEntry": true
+    },
+    "ui-library-DeNM22e2": {
+      "file": "ui-library-DeNM22e2.js",
+      "isDynamicEntry": true
+    },
+    "window-BUWLDCWI": {
+      "file": "window-BUWLDCWI.js",
+      "isDynamicEntry": false
+    },
+    "xray-BsRzWw3T": {
+      "file": "xray-BsRzWw3T.js",
+      "isDynamicEntry": true
+    }
+  }
+}
