@@ -104,6 +104,28 @@ async fn vm_status() -> Result<VmStatus, String> {
     call("GET", "/vm/status", None).await
 }
 
+/// First-run setup: is a provider key already stored in Credential Manager?
+#[tauri::command]
+async fn has_api_key() -> Result<bool, String> {
+    match phantom_core::secrets::get_secret(phantom_core::secrets::API_KEY_TARGET) {
+        Ok(Some(value)) => Ok(!value.trim().is_empty()),
+        Ok(None) => Ok(false),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// First-run setup: store the provider key in Credential Manager. The key is
+/// never written to config.toml or logged; Python reads the same target.
+#[tauri::command]
+async fn set_api_key(key: String) -> Result<(), String> {
+    let key = key.trim();
+    if key.is_empty() {
+        return Err("API key is empty".into());
+    }
+    phantom_core::secrets::set_secret(phantom_core::secrets::API_KEY_TARGET, key)
+        .map_err(|e| e.to_string())
+}
+
 fn main() {
     let token = phantom_control::load_or_create_token().expect("control token");
     let _ = TOKEN.set(token);
@@ -138,7 +160,9 @@ fn main() {
             resolve_approval,
             get_settings,
             set_settings,
-            vm_status
+            vm_status,
+            has_api_key,
+            set_api_key
         ])
         .run(tauri::generate_context!())
         .expect("error while running Phantom");

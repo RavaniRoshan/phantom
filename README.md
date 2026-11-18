@@ -170,13 +170,19 @@ rustup target add x86_64-pc-windows-msvc
 cargo build --release
 ```
 
-The Python service is built separately:
+The Python service is built separately for **development**:
 
 ```powershell
 cd python
 python -m venv .venv && .venv\Scripts\Activate.ps1
 pip install -e .
 ```
+
+For an **installed app** (no Python setup, runs in the background), see
+[docs/install.md](docs/install.md): `scripts/install-local.ps1` stages the
+sidecar, installs the binaries into `%LOCALAPPDATA%\Phantom`, and registers a
+per-user logon task. The GUI's first-run Settings screen stores the provider
+API key in Windows Credential Manager.
 
 ## Usage
 

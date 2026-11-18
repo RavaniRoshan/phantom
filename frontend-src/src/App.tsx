@@ -30,6 +30,8 @@ export default function App() {
   const [frame, setFrame] = useState("No VM frame yet. The agent view streams here when a task runs.")
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<"tasks" | "settings">("tasks")
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
+  const [apiKey, setApiKey] = useState("")
 
   const refresh = useCallback(async () => {
     try {
@@ -50,6 +52,12 @@ export default function App() {
     const timer = window.setInterval(() => void refresh(), 2000)
     return () => window.clearInterval(timer)
   }, [refresh])
+
+  useEffect(() => {
+    void invoke<boolean>("has_api_key")
+      .then(setApiKeyConfigured)
+      .catch(() => setApiKeyConfigured(false))
+  }, [])
 
   useEffect(() => {
     void invoke<Settings>("get_settings")
@@ -107,6 +115,18 @@ export default function App() {
     }
   }
 
+  const onSaveApiKey = async () => {
+    const key = apiKey.trim()
+    if (!key) return
+    try {
+      await invoke("set_api_key", { key })
+      setApiKeyConfigured(true)
+      setApiKey("")
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   const onResolveApproval = async (approve: boolean) => {
     if (approval) {
       try {
@@ -130,6 +150,15 @@ export default function App() {
       {error && (
         <div className="mx-5 mt-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
           {error}
+        </div>
+      )}
+
+      {!apiKeyConfigured && (
+        <div className="mx-5 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-2 text-sm">
+          <span>One-time setup: add your provider API key so Phantom can run tasks.</span>
+          <Button size="sm" variant="outline" onClick={() => setView("settings")}>
+            Open Settings
+          </Button>
         </div>
       )}
 
@@ -231,8 +260,32 @@ export default function App() {
               Model
               <Input id="model" placeholder="default" value={model} onChange={(e) => setModel(e.target.value)} />
             </label>
+            <Separator />
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between text-sm">
+                <span>Provider API key</span>
+                <Badge id="api-key-status" variant={apiKeyConfigured ? "success" : "warning"}>
+                  {apiKeyConfigured ? "Stored in Credential Manager" : "Not configured"}
+                </Badge>
+              </div>
+              <Input
+                id="api-key"
+                type="password"
+                autoComplete="off"
+                placeholder="Paste your provider API key"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+              />
+              <Button id="save-api-key" variant="outline" onClick={() => void onSaveApiKey()}>
+                Save key
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Stored only in Windows Credential Manager. Never written to config or logs.
+              </p>
+            </div>
+            <Separator />
             <Button id="save-settings" onClick={() => void onSaveSettings()}>
-              Save
+              Save settings
             </Button>
           </CardPanel>
         </Card>

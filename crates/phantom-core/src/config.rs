@@ -92,7 +92,9 @@ impl Default for Config {
             step_timeout_secs: 30,
             max_output_bytes: 64 * 1024,
             max_replans: 2,
-            key_ref: String::new(),
+            // Resolve the key from Credential Manager on every request so a
+            // key saved in the GUI's first-run screen takes effect immediately.
+            key_ref: crate::secrets::API_KEY_TARGET.to_string(),
         }
     }
 }

@@ -11,6 +11,7 @@
 mod bus;
 mod engine;
 mod event;
+mod sidecar;
 mod watcher;
 mod webhook;
 
@@ -71,6 +72,11 @@ async fn main() -> anyhow::Result<()> {
     if let Some(g) = cli.grpc_endpoint {
         config.grpc_endpoint = g;
     }
+
+    // Installed apps carry their own Python LLM service. Start it here so the
+    // user never has to install Python or launch a second program. Kept alive
+    // until the daemon exits, then stopped by its Drop impl.
+    let _sidecar = sidecar::Sidecar::start();
 
     let inbox = watcher::inbox_dir(cli.inbox.clone());
     let (tx, rx) = channel(128);

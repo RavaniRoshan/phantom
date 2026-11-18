@@ -20,14 +20,14 @@ class GuiShellTest(unittest.TestCase):
     def test_tauri_commands_cover_required_flows(self):
         src = read("crates/phantom-app/src/main.rs")
         for cmd in ("list_tasks", "submit_task", "cancel_task", "resolve_approval",
-                    "get_settings", "set_settings", "vm_status"):
+                    "get_settings", "set_settings", "vm_status", "has_api_key", "set_api_key"):
             self.assertIn(f"async fn {cmd}", src, f"missing command {cmd}")
         self.assertIn("TrayIconBuilder", src)
         self.assertIn("http://127.0.0.1:4546", src)
 
     def test_frontend_has_required_screens(self):
         source = read("frontend-src/src/App.tsx")
-        for id_ in ("composer", "activity", "task-list", "approval", "settings", "vm-pill"):
+        for id_ in ("composer", "activity", "task-list", "approval", "settings", "vm-pill", "api-key"):
             self.assertIn(f'id="{id_}"', source, f"missing UI element {id_}")
         # Vite must emit into the folder Tauri serves.
         self.assertIn('outDir: "../crates/phantom-app/frontend"', read("frontend-src/vite.config.ts"))
