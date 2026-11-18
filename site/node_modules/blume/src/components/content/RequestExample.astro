@@ -1,0 +1,17 @@
+---
+// `<RequestExample>`: code blocks showing a request, one tab per titled
+// fence (or a language menu with `dropdown`). On a wide screen it pins to the
+// column beside the page (see `ApiRail.astro`), above any `<ResponseExample>`.
+import CodeGroup from "./CodeGroup.astro";
+
+interface Props {
+  /** A language menu in place of tabs. */
+  dropdown?: boolean;
+}
+
+const { dropdown = false } = Astro.props;
+---
+
+<CodeGroup dropdown={dropdown}>
+  <slot />
+</CodeGroup>

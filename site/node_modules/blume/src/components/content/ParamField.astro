@@ -1,0 +1,25 @@
+---
+// `<ParamField query="limit" type="integer" required>`: a request parameter,
+// named by the attribute that says where it goes (`path`, `query`, `header`,
+// or `body`), with its description in the slot. On a page with `api`
+// frontmatter the fields also build that page's playground.
+import ApiField from "./ApiField.astro";
+import { paramField } from "./api-field.ts";
+import type { ParamFieldProps } from "./api-field.ts";
+
+type Props = ParamFieldProps;
+
+const { location, name } = paramField(Astro.props);
+const { default: value, deprecated, required, type } = Astro.props;
+---
+
+<ApiField
+  default={value}
+  deprecated={deprecated}
+  location={location}
+  name={name}
+  required={required}
+  type={type}
+>
+  <slot />
+</ApiField>

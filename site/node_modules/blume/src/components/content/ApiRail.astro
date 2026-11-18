@@ -1,0 +1,19 @@
+---
+// The column `<RequestExample>` and `<ResponseExample>` pin to, which
+// `markdown/api-rail.ts` gathers at the end of the page. At `xl` it sits
+// beside the page's content, which the layout pads to make room, and sticks
+// under the header like an OpenAPI operation's sample panel; below `xl` it
+// follows the content.
+import OperationPanel from "../openapi/OperationPanel.astro";
+---
+
+<div
+  class="not-prose mt-10 xl:absolute xl:inset-y-0 xl:end-0 xl:mt-0 xl:w-[28rem]"
+  data-blume-api-rail
+>
+  <OperationPanel>
+    <div class="flex flex-col gap-4 [&>*]:my-0">
+      <slot />
+    </div>
+  </OperationPanel>
+</div>

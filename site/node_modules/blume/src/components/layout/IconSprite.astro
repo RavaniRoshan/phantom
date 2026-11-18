@@ -1,0 +1,11 @@
+---
+// Where the page's icon sprite goes: every set icon the render registered
+// (see icon-sprite.ts), as one hidden <svg> of <symbol>s the icons' <use>
+// references resolve against. This only leaves a placeholder at the end of
+// the body; the icon-sprite middleware replaces it once the page has fully
+// rendered, since a component here would run before nested components
+// (the header's search button, the content's callouts) register their icons.
+import { ICON_SPRITE_SLOT } from "../icon-sprite-middleware.ts";
+---
+
+<Fragment set:html={ICON_SPRITE_SLOT} />

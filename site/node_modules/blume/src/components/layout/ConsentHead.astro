@@ -1,0 +1,38 @@
+---
+import { consentHead } from "../../consent/head.ts";
+import { CONSENT_INIT_SCRIPT } from "../../consent/init.ts";
+import type { BlumeDataConfig } from "../../core/data.ts";
+
+// The consent layer's <head> output, rendered ahead of `Analytics.astro` by
+// every layout when `consent` is configured: the inline script that creates
+// `window.blumeConsent` (`consent/init.ts`), the adapter's own tags — a
+// hosted consent manager's loader and the bridge that reports its answers —
+// and the runtime that runs the held analytics (`consent/client.ts`), which
+// starts the adapter's browser module, if it has one (`blume:consent-client`,
+// see `consent/clients.ts`). Like analytics, a hosted manager loads in
+// production builds only; a browser module (`native()`'s banner) works in
+// `blume dev` too.
+interface Props {
+  consent: NonNullable<BlumeDataConfig["consent"]>;
+}
+
+const { consent } = Astro.props;
+const tags = import.meta.env.PROD ? consentHead(consent) : [];
+---
+
+<script data-kind={consent.kind} is:inline set:html={CONSENT_INIT_SCRIPT} />
+{
+  tags.map((tag) =>
+    tag.content === null ? (
+      <script is:inline {...tag.attributes} />
+    ) : (
+      <script is:inline set:html={tag.content} {...tag.attributes} />
+    )
+  )
+}
+<script>
+  import { startConsentClient } from "blume:consent-client";
+  import { startConsent } from "../../consent/client.ts";
+
+  startConsent(startConsentClient);
+</script>

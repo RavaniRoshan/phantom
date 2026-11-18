@@ -1,0 +1,18 @@
+---
+// The method and path at the top of a page with `api` frontmatter, as an
+// OpenAPI operation page shows them. `markdown/api-rail.ts` places it.
+import MethodBadge from "../openapi/MethodBadge.astro";
+import { readEndpointSpec } from "./api-page.ts";
+
+interface Props {
+  /** The endpoint, as the page's plugin wrote it. */
+  spec: string;
+}
+
+const { method, target } = readEndpointSpec(Astro.props.spec);
+---
+
+<div class="not-prose mb-6 flex flex-wrap items-center gap-3">
+  <MethodBadge method={method} />
+  <code class="break-all font-mono text-foreground text-sm">{target}</code>
+</div>

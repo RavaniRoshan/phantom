@@ -1,0 +1,24 @@
+---
+import "katex/dist/katex.min.css";
+import katex from "katex";
+
+interface Props {
+  code: string;
+  display?: boolean;
+}
+
+const { code, display = false } = Astro.props;
+
+const html = katex.renderToString(code, {
+  displayMode: display,
+  throwOnError: false,
+});
+---
+
+{
+  display ? (
+    <div class="not-prose my-4 overflow-x-auto" set:html={html} />
+  ) : (
+    <Fragment set:html={html} />
+  )
+}

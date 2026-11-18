@@ -1,0 +1,34 @@
+---
+title: Strapi
+description: Read a Strapi content type through its REST API with the strapi() source, lowering Blocks bodies to Markdown on both Strapi 4 and Strapi 5.
+---
+
+The built-in `strapi()` adapter reads a content type through the Strapi REST API (`/api/<pluralApiId>`) and lowers each entry's Blocks body to Markdown: paragraphs, headings, lists, quotes, code blocks, images, and links. A Markdown rich text field passes through as written, except that a link that isn't a web, mail, phone, or relative address keeps only its label. Strapi 5 responses are read as-is, and the Strapi 4 `attributes` envelope is flattened so the same field paths apply. Nothing to install.
+
+```ts blume.config.ts
+import { defineConfig } from "blume";
+import { filesystem, strapi } from "blume/sources";
+
+export default defineConfig({
+  content: {
+    sources: [
+      filesystem({ root: "docs" }),
+      strapi({
+        prefix: "guides",
+        url: "https://cms.example.com",
+        contentType: "guides",
+        // locale: "en"
+        // Field paths default to title / description / slug / content /
+        // updatedAt; order (no default) sets the sidebar order
+        fields: { body: "body" },
+        // Extra query parameters: filters[...], sort
+        params: { "filters[section][$eq]": "sdk" },
+      }),
+    ],
+  },
+});
+```
+
+The API token comes from the `STRAPI_API_TOKEN` environment variable, sent as a bearer token. Entries are fetched with `populate=*` so images carry their URLs (set `populate` to narrow it), and a relative upload path (`/uploads/x.png`) in a Blocks field resolves against `url`. A Markdown field passes through as written, so a relative path there stays relative to your docs site and breaks: use absolute image URLs in Markdown fields, as Strapi's Markdown editor inserts them. Only published entries are imported — `--preview` requests drafts (`status=draft` on Strapi 5, `publicationState=preview` on Strapi 4) and stages each document that has never been published with `draft: true`; a published document previews its latest draft.
+
+[Use Strapi to manage a documentation website](/guides/strapi-documentation-website) walks through it end to end: editors publishing in Strapi, a static site rebuilt on every publish, and drafts kept off production.

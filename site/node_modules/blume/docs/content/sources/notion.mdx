@@ -1,0 +1,47 @@
+---
+title: Notion
+description: Import a Notion database with the notion() source — rows become pages, properties become frontmatter, and blocks become Blume components.
+---
+
+The built-in `notion()` adapter turns a Notion database into a collection: each row becomes a page, its properties become frontmatter, and its block tree becomes MDX. Callouts, toggles, columns, and code blocks map to the matching Blume components, and the text you type in Notion renders as written: a `{`, `<`, or Markdown character in a page is escaped rather than read as MDX, JSX, or formatting, unless you [opt in to MDX](#writing-mdx-in-notion). Video blocks become a `<YouTube>` embed when they hold a YouTube link and a `<video>` player otherwise, with the block's caption as a `<Frame>` caption either way. A link to a video page rather than a media file (a Vimeo or Loom URL, say) is reported as a build warning, and its `<video>` player keeps pointing at the page, which it can't play — link to that video from the text instead. The adapter declares `@notionhq/client` (v5 or later) as its runtime dependency — an optional peer; Blume reads the database through its first data source.
+
+```ts blume.config.ts
+import { defineConfig } from "blume";
+import { filesystem, notion } from "blume/sources";
+
+export default defineConfig({
+  content: {
+    sources: [
+      filesystem({ root: "docs" }),
+      notion({
+        prefix: "handbook",
+        database: "8f2c1e0a4b7d4f3c9e6a5d2b1c0f9e8d", // the id in the database URL
+        // Property names default to the title-typed prop / Description / Slug / Order / Status
+        // Pages whose Status isn't publishedValue (default "Published") import as drafts
+        publishedValue: "Done",
+      }),
+    ],
+  },
+});
+```
+
+The integration token comes from the `NOTION_TOKEN` environment variable (share the database with your integration). Without it, the source stops before calling Notion with a `BLUME_MISSING_SECRET` error naming the variable, unless it has a [cached snapshot](/docs/content/sources#caching-and-offline-builds) to serve instead.
+
+The `Status` property is a publish gate by default. A page whose Status (a status or select property) holds any value other than `publishedValue`, which defaults to `Published`, imports with `draft: true`, and production builds drop drafts. A page with no Status value is published, and a database without the property publishes every page. Notion's default status options are Not started, In progress, and Done, so a database that uses them has no `Published` value and publishes nothing until you set `publishedValue: "Done"` (or whichever option means published). `properties.status` names a differently named property; to import every page whatever its status, point it at a property the database doesn't have.
+
+**Notion image and video URLs are signed and expire**, so the adapter downloads them at build time into the site's assets and rewrites the references — a CMS asset never rots a static build. Only a file the server reports as an image or video is saved (or, when the response doesn't say, one whose URL names an image or video extension); anything else keeps its original URL with a build warning, so nothing but media is ever served from your site's origin. API calls are paced through a small request pool (3 at a time, matching Notion's per-integration rate limit) so databases with hundreds of pages import without tripping `429` responses; set `concurrency` on the source to tune it.
+
+[Turn a Notion database into a docs site](/guides/notion-documentation-website) walks through it end to end, with a Status property that decides what goes live. [Combine Markdown and Notion in one documentation site](/guides/markdown-notion-documentation) gives Notion editors a section of their own beside the Markdown in Git.
+
+## Writing MDX in Notion
+
+Notion has no block for most Blume components. To use one in a Notion page (a `<CardGroup>` of `<Card>`s, say), type its MDX as text and set `mdx: true`: the source then reads the text of paragraphs, headings, list items, quotes, and callouts as MDX, so components, `{expressions}`, and Markdown typed in Notion render alongside Notion's own bold, italic, links, and inline code. Code blocks, toggle titles, image and video captions, and properties stay plain text.
+
+```ts blume.config.ts
+notion({
+  database: "8f2c1e0a4b7d4f3c9e6a5d2b1c0f9e8d",
+  mdx: true,
+});
+```
+
+The text is then held to MDX's rules, like an `.mdx` file: a stray `{` or `<` fails the page, and a paragraph starting with `import` reads as an import statement. **MDX runs code when the site builds**, so anyone who can edit the database can run code on your build machine and read its environment variables, `NOTION_TOKEN` included. Turn `mdx` on only for a database whose editors you'd trust with the site's code.

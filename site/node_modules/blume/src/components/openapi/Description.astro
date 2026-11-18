@@ -1,0 +1,109 @@
+---
+import { descriptionHtml } from "./description.ts";
+
+/**
+ * A spec description, rendered as Markdown.
+ *
+ * One component rather than the same three lines in six places, and that is not only tidiness:
+ * the styling below is emitted ONCE per page here, where writing it as utility classes on each
+ * element repeated it per description instead. On the largest reference page that is 2,400
+ * descriptions — the first attempt at this put 1.5 MB of identical class attributes into a single
+ * HTML document and pushed eight pages past Googlebot's 2 MB crawl limit, which `blume audit`
+ * caught. A class name and one stylesheet cost the same at one description as at two thousand.
+ */
+interface Props {
+  /** Extra classes for the wrapper — position and base type come from the caller. */
+  class?: string;
+  text?: string;
+}
+
+const { class: className = "", text } = Astro.props;
+const html = descriptionHtml(text);
+---
+
+{html && <div class:list={["blume-api-description", className]} set:html={html} />}
+
+<style is:global>
+  /* Plain CSS on a single class, not the typography plugin's `prose`. `prose` sets its own font
+     size, colour and rhythm, all of which fight the muted small type these sit in — a property
+     description would come out larger and darker than the property name above it. Only what
+     Markdown needs is styled; everything else inherits, so a description still reads as
+     annotation rather than as body copy. */
+  .blume-api-description > :first-child {
+    margin-top: 0;
+  }
+
+  .blume-api-description > :last-child {
+    margin-bottom: 0;
+  }
+
+  .blume-api-description p,
+  .blume-api-description ol,
+  .blume-api-description ul,
+  .blume-api-description pre {
+    margin-block: 0.5rem;
+  }
+
+  .blume-api-description ol {
+    list-style: decimal;
+    padding-inline-start: 1.25rem;
+  }
+
+  .blume-api-description ul {
+    list-style: disc;
+    padding-inline-start: 1.25rem;
+  }
+
+  .blume-api-description li {
+    margin-block: 0.25rem;
+  }
+
+  /* A heading in a description is a label for the paragraph under it, not a section of the
+     page: it keeps the description's own size and only gains the weight and colour of a label.
+     Without this it inherits the reset's unstyled heading and is indistinguishable from text. */
+  .blume-api-description :is(h1, h2, h3, h4, h5, h6) {
+    color: var(--color-foreground);
+    font-weight: 600;
+    margin-block: 0.5rem;
+  }
+
+  .blume-api-description strong {
+    color: var(--color-foreground);
+    font-weight: 600;
+  }
+
+  .blume-api-description a {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* Matched to the chip the reference already draws for an enum value, so an `apiKey` in prose
+     looks like the `apiKey` in the chips beside it. */
+  .blume-api-description code {
+    background: var(--color-muted);
+    border-radius: 0.25rem;
+    color: var(--color-foreground);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    padding: 0.125rem 0.25rem;
+  }
+
+  .blume-api-description pre {
+    background: var(--color-muted);
+    border-radius: 0.25rem;
+    overflow-x: auto;
+    padding: 0.5rem;
+  }
+
+  .blume-api-description pre code {
+    background: none;
+    padding: 0;
+  }
+
+  /* The scroll frame a table gets from `descriptionHtml` carries the body's own 1.5rem rhythm,
+     which is three times what everything else in a description sits at. Only the margin is
+     restated; the frame, the cell padding and the scrolling are the renderer's. */
+  .blume-api-description .blume-table-scroll {
+    margin-block: 0.5rem;
+  }
+</style>

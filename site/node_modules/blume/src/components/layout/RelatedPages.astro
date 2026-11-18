@@ -1,0 +1,42 @@
+---
+import type { RelatedLink } from "../../core/related.ts";
+import Card from "../content/Card.astro";
+import CardGroup from "../content/CardGroup.astro";
+
+/**
+ * A page's `related` links, as cards at its foot: each linked page's title
+ * and description, or a URL's host for a link off the site (see
+ * `core/related.ts`).
+ */
+interface Props {
+  links: RelatedLink[];
+  /** The heading, from the `page.related` UI string. */
+  title: string;
+}
+
+const { links, title } = Astro.props;
+---
+
+{
+  links.length > 0 && (
+    <nav
+      aria-labelledby="blume-related-pages"
+      class="mx-auto mt-10 max-w-content"
+      data-blume-related
+    >
+      <h2
+        class="font-medium text-foreground text-sm"
+        id="blume-related-pages"
+      >
+        {title}
+      </h2>
+      <CardGroup>
+        {links.map((link) => (
+          <Card href={link.href} title={link.title}>
+            {link.description}
+          </Card>
+        ))}
+      </CardGroup>
+    </nav>
+  )
+}

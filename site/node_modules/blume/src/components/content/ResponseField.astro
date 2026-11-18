@@ -1,0 +1,32 @@
+---
+// `<ResponseField name="id" type="string" required>`: a field of the
+// response, with optional `pre` and `post` labels around its name and its
+// description in the slot.
+import ApiField from "./ApiField.astro";
+import { fieldLabels } from "./api-field.ts";
+import type { ResponseFieldProps } from "./api-field.ts";
+
+type Props = ResponseFieldProps;
+
+const {
+  default: value,
+  deprecated,
+  name,
+  post,
+  pre,
+  required,
+  type,
+} = Astro.props;
+---
+
+<ApiField
+  default={value}
+  deprecated={deprecated}
+  name={name}
+  post={fieldLabels(post)}
+  pre={fieldLabels(pre)}
+  required={required}
+  type={type}
+>
+  <slot />
+</ApiField>
