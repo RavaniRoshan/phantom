@@ -28,6 +28,11 @@ message ActionRequest {
   // PNG is normalized at capture, so this is normally "image/png". Providers
   // must honor it rather than hard-coding a media type; empty means "sniff".
   string screenshot_mime = 7;
+  // B3: per-request model selection (BYOK). `key_ref` names a credential-store
+  // entry, never the secret itself; empty means "use the service default".
+  string provider = 8;
+  string model = 9;
+  string key_ref = 10;
 }
 
 // The single neutral action shape. Every LLM provider maps its native

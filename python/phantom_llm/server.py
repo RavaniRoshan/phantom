@@ -69,12 +69,32 @@ def _decide_request_from_proto(request) -> DecideRequest:
 
 
 class PhantomLLMServicer(phantom_pb2_grpc.PhantomLLMServicer):
-    def __init__(self, provider):
+    def __init__(self, provider, cfg: dict | None = None):
         self.provider = provider
+        self.cfg = cfg or {}
+        self._providers: dict[tuple[str, str, str], object] = {}
+
+    def _provider_for(self, request):
+        """B3: per-request provider/model/key_ref, cached by (provider, model, ref)."""
+        name = (getattr(request, "provider", "") or self.cfg.get("provider") or "claude").strip().lower()
+        model = (getattr(request, "model", "") or self.cfg.get("model") or "").strip() or None
+        key_ref = (getattr(request, "key_ref", "") or "").strip()
+        from .provider_config import resolve_key
+
+        key = resolve_key(key_ref) if key_ref else self.cfg.get("api_key", "")
+        endpoint = self.cfg.get("endpoint", "")
+        if name == "openrouter" and not endpoint:
+            endpoint = "https://openrouter.ai/api/v1"
+        cache_key = (name, model or "", key_ref)
+        if cache_key not in self._providers:
+            self._providers[cache_key] = build_provider(
+                name, api_key=key or "", endpoint=endpoint, model=model
+            )
+        return self._providers[cache_key]
 
     async def DecideAction(self, request, context):
         try:
-            decision = await self.provider.decide(_decide_request_from_proto(request))
+            decision = await self._provider_for(request).decide(_decide_request_from_proto(request))
             # Defense in depth: re-normalize strictly on the server boundary so
             # no provider (including mocks that build ActionDecision directly)
             # can turn malformed/missing model output into a silent `done`.
@@ -103,7 +123,7 @@ class PhantomLLMServicer(phantom_pb2_grpc.PhantomLLMServicer):
 
     async def PlanTask(self, request, context):
         try:
-            steps = await self.provider.plan(PlanRequest(task=request.task, mode=request.mode or "safe"))
+            steps = await self._provider_for(request).plan(PlanRequest(task=request.task, mode=request.mode or "safe"))
         except ValueError as e:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"invalid plan: {e}")
         return phantom_pb2.PlanResponse(
@@ -114,7 +134,7 @@ class PhantomLLMServicer(phantom_pb2_grpc.PhantomLLMServicer):
         )
 
     async def StreamThinking(self, request, context):
-        async for chunk in self.provider.stream(_decide_request_from_proto(request)):
+        async for chunk in self._provider_for(request).stream(_decide_request_from_proto(request)):
             yield phantom_pb2.ThinkingChunk(text=chunk.text, phase=chunk.phase)
 
 
@@ -127,7 +147,7 @@ async def _serve() -> None:
 
     server = grpc.aio.server()
     phantom_pb2_grpc.add_PhantomLLMServicer_to_server(
-        PhantomLLMServicer(provider), server
+        PhantomLLMServicer(provider, cfg), server
     )
     port = os.environ.get("PHANTOM_GRPC_PORT", "50051")
     # Bind IPv4 wildcard so the Rust gRPC client (which connects to the IPv4

@@ -193,6 +193,10 @@ impl Agent {
                     last_screenshot.as_deref().unwrap_or_default(),
                 )
                 .to_string(),
+                // B3: per-request provider/model/key reference.
+                provider: self.config.provider.clone(),
+                model: self.config.model.clone(),
+                key_ref: self.config.key_ref.clone(),
             };
 
             // W0.3: exactly ONE inference per step. The old pre-call to

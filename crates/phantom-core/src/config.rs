@@ -71,6 +71,9 @@ pub struct Config {
     pub max_output_bytes: usize,
     /// Bounded re-plan attempts after a failed verification (W7.3).
     pub max_replans: u32,
+    /// Credential-store target for the active provider's key (B3).
+    /// The secret itself is never stored in config.toml.
+    pub key_ref: String,
 }
 
 impl Default for Config {
@@ -89,6 +92,7 @@ impl Default for Config {
             step_timeout_secs: 30,
             max_output_bytes: 64 * 1024,
             max_replans: 2,
+            key_ref: String::new(),
         }
     }
 }
